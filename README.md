@@ -1,5 +1,7 @@
 # job-application — Claude Cowork Skill
 
+**[🌐 Landing Page](https://cestduleon.dev/job-application/)**
+
 A full-cycle job application skill for [Claude Cowork](https://claude.ai). Drop it into your `.claude/skills/` directory and Claude becomes an end-to-end job search partner: from building your candidate profile through interview prep and salary negotiation.
 
 ---
