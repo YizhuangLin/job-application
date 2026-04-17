@@ -87,31 +87,34 @@ Adapt to the candidate and role. Structure:
 
 ---
 
-## Step 5b — Keyword Frequency (not just presence)
+## Step 5b — Keyword Placement (natural, not stuffed)
 
-ATS systems don't just check whether a keyword exists — they score on **keyword density and distribution**. A keyword appearing in 3 sections scores significantly higher than the same keyword appearing once.
+**Bust the density myth first.** Modern ATSs (Workday, Greenhouse, Lever, Ashby) parse the resume into structured fields — they do **not** rank candidates on how many times a keyword appears. The real screening happens when a recruiter skims the document. What matters:
 
-**Target distribution for the top 3–5 JD keywords:**
+1. Each top keyword appears **at least once**, in a place a recruiter reads (Summary or a work bullet)
+2. Phrasing matches the JD's exact terminology (e.g. "GA4" when JD says GA4, not "Google Analytics")
+3. No stuffing — the same keyword forced into 4 sections reads as low-signal to both humans and modern relevance models
 
-| Keyword location | Score weight (approximate) |
+**Where a keyword lives, in order of recruiter visibility:**
+
+| Location | Why it matters |
 |---|---|
-| Job title / Summary | High |
-| Work experience bullet | Medium-high |
-| Skills section | Medium |
-| Education (if relevant) | Low |
+| Job title / Summary | First thing read; signals role alignment |
+| Work experience bullet | Primary evidence that the skill was actually used |
+| Skills section | Useful for completeness, but Skills-only mentions tend to be skimmed |
+| Education | Only relevant if the keyword is a degree / credential |
 
 **How to apply:**
-1. Identify the 3–5 most-repeated or most-weighted keywords in the JD
-2. Check which sections they currently appear in on the candidate's resume
-3. For any keyword appearing in only 1 section, find a natural, truthful way to add it to a second section
+1. Identify the 3–5 most-weighted keywords in the JD (appear in requirements AND responsibilities)
+2. For each, confirm it appears in the Summary OR a work bullet — not just the Skills row
+3. If it's already in both Summary and a bullet, do not add it elsewhere — you're done
 
 **Example:**
-JD keyword: "Google Analytics 4 / GA4"  
-- Currently in Skills: ✅  
-- Not in any bullet: → Add to ORE/current role bullet: "...tracked via GA4 and..."  
-- Not in Summary: → If space permits, add to Summary: "...analytics-driven through GA4..."
+JD keyword: "Google Analytics 4 / GA4"
+- Currently only in Skills: → Add to the most relevant work bullet: "…tracked via GA4 and…"
+- Already in a bullet: → Do not also force into Summary unless it genuinely belongs in the positioning line
 
-**Do not force keywords unnaturally.** If a keyword cannot be added without misrepresenting the candidate's work, leave it in the Skills row only and note the gap.
+**Do not force keywords unnaturally.** If a keyword cannot be added without misrepresenting the candidate's work, leave it in the Skills row only and note the gap. Honest absence beats dishonest presence.
 
 ---
 

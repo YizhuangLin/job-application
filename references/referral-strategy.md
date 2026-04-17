@@ -1,6 +1,6 @@
 # Referral & Network Strategy
 
-Internal referrals convert to interviews at 5–10× the rate of cold applications. Check this channel **before** cold-applying to any High Match company.
+Internal referrals typically convert to interviews at roughly **3–5× the rate** of cold applications — the commonly-cited "5–10×" figure comes from best-case studies (senior hires, strong advocates) and overstates the average. Exact multiplier depends on industry, seniority, and how well the referrer actually knows the candidate. A genuine internal advocate is transformative; a lukewarm "connect" barely beats a cold apply. Check this channel **before** cold-applying to any High Match company.
 
 ---
 

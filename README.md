@@ -6,6 +6,25 @@ A full-cycle job application skill for [Claude Cowork](https://claude.ai). Drop 
 
 ---
 
+## Quickstart — find your entry point
+
+You don't need to start at Phase 1. Pick the row that matches where you are:
+
+| You are… | Say something like… | Claude will start at |
+|---|---|---|
+| 🆕 **First time job-searching** or changing careers | *"Help me set up my job search"* | Phase 1 — builds your candidate profile + master context doc |
+| 📄 **Have a resume**, need an honest review | *"Review my resume for ATS and red flags"* | Phase 2 — resume assessment |
+| 🔍 **Want to find jobs** matching your profile | *"Find me jobs"* / *"Search for [role] in [city]"* | Phase 3 — job search + timing filter |
+| 🎯 **Found a specific posting** you want to apply to | *"Help me apply to this role: [URL or JD]"* | Phase 4 → 5 → 6 → 7 — company research, referral check, per-JD resume, cover material, submission |
+| 📊 **Managing an active pipeline** | *"Help me track my applications"* | Phase 8 — application tracking |
+| ⚠️ **Applied to many, no callbacks** | *"I'm not getting replies — what's wrong?"* | Phase 9 — response-rate diagnostics |
+| 💬 **Got an interview invitation** | *"Prepare me for my interview at [Company]"* | Phase 10 — interview prep + company dossier |
+| 💰 **Received an offer** | *"Help me evaluate / negotiate this offer"* | Phase 11 — offer evaluation + negotiation |
+
+Claude reads only the reference files relevant to your entry phase, keeping the conversation fast and focused. You can jump between phases as your situation evolves — e.g. finish Phase 5 for one role, then switch to Phase 10 for an interview at a different company.
+
+---
+
 ## What it does
 
 The skill covers 11 phases in a single workflow:
@@ -31,13 +50,14 @@ The skill covers 11 phases in a single workflow:
 - **Claude Cowork** (desktop app) — available at [claude.ai](https://claude.ai)
 - The **docx skill** installed alongside this one (provides `scripts/office/pack.py` and `soffice.py` for `.docx` + PDF generation)
 - A `.docx` master resume to work from
-- Optionally: a **Notion MCP** connector for application tracking in a Notion database
+
+**No external tracker required.** The default application tracker is a flat markdown file at `{{workspace}}/applications.md`, maintained by Claude with the Edit tool. You do not need Notion, Google Sheets, Airtable, or any account to use Phase 8.
 
 The skill uses these Claude tools when available:
 - `search_jobs` / `get_job_details` — live job board search (Indeed via job-application MCP)
 - `get_company_data` — company research
 - `get_resume` — reads the candidate's resume file
-- Notion MCP tools — for syncing the application tracker
+- *(Opt-in upgrades)* Notion MCP or Google Sheets MCP — only if you want to move past the default Markdown tracker; see `references/post-application.md` Part E.1 / E.2
 
 ---
 
@@ -63,17 +83,26 @@ The skill uses these Claude tools when available:
 
 ```
 job-application/
-├── SKILL.md                        ← Main skill definition (loaded by Claude)
+├── SKILL.md                           ← Main skill definition (loaded by Claude)
+├── CHANGELOG.md                       ← Version history (SemVer + Keep a Changelog)
+├── evals/                             ← Minimal prompt-level regression tests
+│   ├── README.md                      ← How to run · scenarios table · template
+│   ├── 01-entry-triage.md             ← Guards Phase 2 routing for users with a resume
+│   ├── 02-interview-prep-lazy-ssot.md ← Guards Phase 10 against forced Phase 1 setup
+│   └── 03-keyword-placement.md        ← Guards against keyword-density stuffing
 └── references/
-    ├── resume-standards.md         ← ATS checklist, document structure, red flags
-    ├── jd-analysis.md              ← Keyword extraction, gap analysis, frequency scoring
-    ├── company-research.md         ← Research framework (stage, signals, what to extract)
-    ├── cover-letter.md             ← When/how to write cover material; templates
-    ├── referral-strategy.md        ← Network check, referral outreach scripts
-    ├── build-script.md             ← Python helpers for .docx XML editing and PDF conversion
-    ├── interview-prep.md           ← STAR framework, question bank, thank-you email
-    ├── salary-negotiation.md       ← Package evaluation, counter scripts, anchoring
-    └── post-application.md         ← Combined post-application reference (interview + salary + referral)
+    ├── context-doc-template.md        ← Tier 1 SSOT template — your master profile doc
+    ├── sync-rules.md                  ← Three-tier document sync protocol + change log format
+    ├── company-dossier-template.md    ← Per-company deep file (research · contacts · interview log · offer)
+    ├── resume-standards.md            ← ATS checklist, document structure, red flags
+    ├── jd-analysis.md                 ← Keyword extraction, placement, gap analysis
+    ├── company-research.md            ← Research framework (stage, signals, what to extract)
+    ├── cover-letter.md                ← When/how to write cover material; templates
+    ├── referral-strategy.md           ← Network check, referral outreach scripts
+    ├── build-script.md                ← Python helpers for .docx XML editing and PDF conversion
+    ├── interview-prep.md              ← STAR framework, question bank, thank-you email
+    ├── salary-negotiation.md          ← Package evaluation, counter scripts, anchoring
+    └── post-application.md            ← Post-application reference (Parts A–E: referral · interview · salary · follow-up template · tracker fields)
 ```
 
 Claude reads reference files on demand — only the ones relevant to the current phase are loaded, keeping token usage efficient.
@@ -82,13 +111,13 @@ Claude reads reference files on demand — only the ones relevant to the current
 
 ## Key design principles
 
-**Timing over volume.** Most job postings receive 60–80% of applications in the first 3 days. The skill prioritises applying within 48 hours of a posting going live and flags older postings as lower priority.
+**Timing over volume.** For most commercial roles, application volume concentrates in the first 1–2 weeks after a posting goes live, so applying early raises the odds of a human reading your resume. Executive, government, and academic roles follow their own paced timelines — the skill treats timing per role category rather than applying one rule to all.
 
-**Referral first.** Before cold-applying to any high-match company, the skill checks whether the candidate has a connection. A referral converts to an interview at 5–10× the rate of a cold application.
+**Referral first.** Before cold-applying to any high-match company, the skill checks whether the candidate has a connection. A referral typically converts to an interview at roughly 3–5× the rate of a cold application — the exact multiplier varies by industry and the strength of the connection.
 
 **No fabrication.** The skill never adds skills the candidate doesn't have. Gaps are noted honestly and addressed in cover material.
 
-**ATS safety.** Every generated resume is validated for common ATS failure modes: no Chinese characters, no bare `&` in XML, no tables, no text boxes, no images, 1-page limit.
+**ATS safety.** Every generated resume is validated for common ATS failure modes: no prohibited characters, no bare `&` in XML, no tables, no text boxes, no images, 1-page by default (2 pages allowed for senior / academic / UK-EU CV formats).
 
 **One follow-up maximum.** After 5–7 business days with no response, one follow-up message. Never more.
 
@@ -96,9 +125,9 @@ Claude reads reference files on demand — only the ones relevant to the current
 
 ## Adapting to your setup
 
-### Tracking without Notion
+### Upgrading past the default Markdown tracker
 
-Replace Phase 8 Notion references with any flat file or spreadsheet. The minimum tracking fields are defined in `SKILL.md` Phase 8 — they work equally well in a local `.md` file or a Google Sheet.
+The default tracker is `{{workspace}}/applications.md` — zero setup, works immediately, good for up to ~100 applications per job-search cycle. If you want structured database views (filtering, rollups, kanban) or want to share the tracker with a partner / coach, the column set in `SKILL.md` Phase 8 + `references/post-application.md` Part E translates directly to Notion (Part E.1) or Google Sheets (Part E.2). Claude only routes to the adapter when you explicitly ask — the default behaviour is to write to the markdown file.
 
 ### Resume format
 
@@ -110,18 +139,18 @@ The skill uses `search_jobs` / `get_job_details` from the [job-application MCP](
 
 ---
 
-## Hard rules (enforced throughout)
+## Hard rules (the 8 non-negotiables)
 
-1. 1-page resume maximum
+1. **1 page preferred** — senior/exec, academic, or UK/EU CV traditions may legitimately extend to 2 pages
 2. Always generate both `.docx` and `.pdf`
 3. ATS-safe format only (no tables, text boxes, images, critical content in headers/footers)
 4. No fabricated skills — gaps are noted, never invented
 5. Referral check before every cold application to a high-match company
-6. Apply within 48 hours — flag anything older than 2 weeks
+6. **Apply early when timing matters** — 48 hours for most commercial roles; exec / government / academic hires follow their own timelines
 7. One follow-up only, after 5–7 business days
 8. Resume must match LinkedIn before applying
-9. Never disclose your salary floor — always anchor above target
-10. Get any offer in writing before giving notice
+
+Implementation details — XML escaping, three-tier document sync, per-company dossier creation, Entry Triage routing, salary-negotiation tactics — live in their respective reference files rather than being hoisted into the hard-rules list. This keeps the top-level rules memorable.
 
 ---
 

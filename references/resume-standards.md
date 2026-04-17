@@ -12,7 +12,7 @@ Run these checks on every resume before delivering:
 | No text boxes | `grep -c 'txbxContent' doc.xml` | 0 |
 | No images | `ls word/media/` | Empty |
 | Paragraph balance | Count `<w:p>` vs `</w:p>` | Equal |
-| Page count | Convert to PDF, inspect | 1 page |
+| Page count | Convert to PDF, inspect | 1 page (default); 2 pages acceptable for senior/exec/academic or UK/EU CV traditions |
 
 ---
 
