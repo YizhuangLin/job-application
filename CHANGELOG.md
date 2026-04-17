@@ -18,9 +18,6 @@ All notable changes to the `job-application` skill are documented here. Format f
 ### Why
 Previous v0.4.0 framing said "Storage defaults to flat markdown table in the workspace; Notion, Google Sheet, or Airtable work equally well." The phrase "work equally well" is technically true but operationally ambiguous — it let Claude read Phase 8 as "ask the candidate where they want to track." In practice this showed up as Claude calling `search_mcp_registry` or asking "would you like to connect your Notion?" on first tracking action, which is a zero-to-one friction for OSS users who don't have Notion. Making the default unambiguous and relocating Notion/Sheets into named opt-in adapters removes that friction while keeping the upgrade paths documented for power users.
 
-### Not changed
-- Leon's personal workflow continues to use Notion (via `Job_Search_Progress.md` as Tier 1 SSOT + Notion as Tier 3 external mirror). This change affects the OSS default only — existing Notion users lose nothing.
-
 ---
 
 ## 0.4.0 — 2026-04-16
