@@ -1,8 +1,8 @@
 # job-application — Claude Cowork Skill
 
-**[🌐 Landing Page](https://cestduleon.dev/job-application/)**
+**[🌐 Landing Page](https://cestduleon.dev/job-application/)** — design philosophy, scenarios, and install walkthrough. Start here if you want the "why" before the "how."
 
-A full-cycle job application skill for [Claude Cowork](https://claude.ai). Drop it into your `.claude/skills/` directory and Claude becomes an end-to-end job search partner: from building your candidate profile through interview prep and salary negotiation.
+A full-cycle job application skill for [Claude Cowork](https://claude.ai). Drop it into your `.claude/skills/` directory and Claude becomes an end-to-end job search partner: from building your candidate profile through interview prep and salary negotiation. This README is the technical reference — installation, file structure, hard rules, and extension points.
 
 ---
 
@@ -12,6 +12,7 @@ You don't need to start at Phase 1. Pick the row that matches where you are:
 
 | You are… | Say something like… | Claude will start at |
 |---|---|---|
+| 🧭 **Just want a read on my situation** (first contact) | *"I want to look for jobs"* / *"I'm thinking about switching"* | Phase 0 — 3-question reality check · sets strictness tier (light / standard / deep) |
 | 🆕 **First time job-searching** or changing careers | *"Help me set up my job search"* | Phase 1 — builds your candidate profile + master context doc |
 | 📄 **Have a resume**, need an honest review | *"Review my resume for ATS and red flags"* | Phase 2 — resume assessment |
 | 🔍 **Want to find jobs** matching your profile | *"Find me jobs"* / *"Search for [role] in [city]"* | Phase 3 — job search + timing filter |
@@ -20,17 +21,21 @@ You don't need to start at Phase 1. Pick the row that matches where you are:
 | ⚠️ **Applied to many, no callbacks** | *"I'm not getting replies — what's wrong?"* | Phase 9 — response-rate diagnostics |
 | 💬 **Got an interview invitation** | *"Prepare me for my interview at [Company]"* | Phase 10 — interview prep + company dossier |
 | 💰 **Received an offer** | *"Help me evaluate / negotiate this offer"* | Phase 11 — offer evaluation + negotiation |
+| 😮‍💨 **Hit a wall** (rejection streak, burnout, pre-interview anxiety, offer fear) | *"I'm burning out"* / *"I just got rejected"* / *"Interview tomorrow and I'm spiralling"* | `coping.md` — 24h rejection protocol, burnout check, pre-interview stabilization, offer-fear reality |
 
 Claude reads only the reference files relevant to your entry phase, keeping the conversation fast and focused. You can jump between phases as your situation evolves — e.g. finish Phase 5 for one role, then switch to Phase 10 for an interview at a different company.
+
+**Strictness tiers (new in 0.6.0):** Phase 0 puts you in **light**, **standard** (default), or **deep** mode based on time / clarity / urgency. Light skips SSOT setup, dossiers, and most cover letters; standard is the full flow as written below; deep layers on proactive SSOT, dossier for every Medium+ Match, and tighter discipline for a career-pivot or < 4-week runway search. You can switch tiers between phases at any time.
 
 ---
 
 ## What it does
 
-The skill covers 11 phases in a single workflow:
+The skill covers a brief Phase 0 reality check plus 11 execution phases in a single workflow:
 
 | Phase | What happens |
 |---|---|
+| 0. Reality Check | Three questions (time / clarity / urgency) → assigns a strictness tier that modifies how the rest of the skill runs |
 | 1. Candidate Intake | Builds a complete profile from your resume; flags LinkedIn mismatches |
 | 2. Base Resume Assessment | ATS compliance check, red flag identification, 1-page compression |
 | 3. Job Search & Timing | Searches live job boards; flags postings older than 2 weeks |
@@ -89,7 +94,9 @@ job-application/
 │   ├── README.md                      ← How to run · scenarios table · template
 │   ├── 01-entry-triage.md             ← Guards Phase 2 routing for users with a resume
 │   ├── 02-interview-prep-lazy-ssot.md ← Guards Phase 10 against forced Phase 1 setup
-│   └── 03-keyword-placement.md        ← Guards against keyword-density stuffing
+│   ├── 03-keyword-placement.md        ← Guards against keyword-density stuffing
+│   ├── 04-tracker-default-markdown.md ← Guards Phase 8 default backend (markdown, not Notion)
+│   └── 05-phase-0-light-tier.md       ← Guards Phase 0 routing casual users to light tier
 └── references/
     ├── context-doc-template.md        ← Tier 1 SSOT template — your master profile doc
     ├── sync-rules.md                  ← Three-tier document sync protocol + change log format
@@ -102,7 +109,8 @@ job-application/
     ├── build-script.md                ← Python helpers for .docx XML editing and PDF conversion
     ├── interview-prep.md              ← STAR framework, question bank, thank-you email
     ├── salary-negotiation.md          ← Package evaluation, counter scripts, anchoring
-    └── post-application.md            ← Post-application reference (Parts A–E: referral · interview · salary · follow-up template · tracker fields)
+    ├── post-application.md            ← Post-application reference (Parts A–E: referral · interview · salary · follow-up template · tracker fields)
+    └── coping.md                      ← Emotional pacing — rejection 24h protocol, burnout signals, pre-interview stabilization, offer-fear reality
 ```
 
 Claude reads reference files on demand — only the ones relevant to the current phase are loaded, keeping token usage efficient.
@@ -120,6 +128,10 @@ Claude reads reference files on demand — only the ones relevant to the current
 **ATS safety.** Every generated resume is validated for common ATS failure modes: no prohibited characters, no bare `&` in XML, no tables, no text boxes, no images, 1-page by default (2 pages allowed for senior / academic / UK-EU CV formats).
 
 **One follow-up maximum.** After 5–7 business days with no response, one follow-up message. Never more.
+
+**Capacity-matched strictness.** Phase 0 picks a tier (light / standard / deep) from the user's time, clarity, and urgency. A 2-hour-a-week casual search does not get pushed through an 11-section SSOT + per-company dossier flow — structural overhead is proportional to the user's capacity, not forced by the skill.
+
+**Emotional pacing, not execution-only.** `coping.md` covers the parts most job-search tools pretend don't exist: 24-hour post-rejection protocol, burnout warning signs, pre-interview nervous-system regulation, offer-fear reality data. Hooked into Phases 8 / 9 / 10 / 11 so they surface when relevant — not as a wellness module off to the side.
 
 ---
 

@@ -21,6 +21,7 @@ Automated harness is out of scope for v0.4. The scenarios are authored so a huma
 | `02-interview-prep-lazy-ssot.md` | Phase 10 (interview in 2 days, no prior SSOT) | Claude forcing Phase 1 SSOT setup when user urgently needs interview prep (lazy-SSOT rule) |
 | `03-keyword-placement.md` | Phase 5 (customising resume for a JD) | Claude recommending keyword-density stuffing (resurrection of the density myth removed in 0.4.0) |
 | `04-tracker-default-markdown.md` | Phase 8 (first application logged) | Claude prompting for a Notion / Sheets connector instead of writing to `{{workspace}}/applications.md` (0.5.0 default-backend change) |
+| `05-phase-0-light-tier.md` | Phase 0 (casual user, 2h/week) | Claude defaulting to standard tier and running full Phase 1 + dossier + full tracker when Phase 0 should route to **light** tier (0.6.0 Reality Check) |
 
 ## Adding a new scenario
 

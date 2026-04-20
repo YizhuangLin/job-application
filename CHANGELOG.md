@@ -4,6 +4,34 @@ All notable changes to the `job-application` skill are documented here. Format f
 
 ---
 
+## 0.6.0 — 2026-04-17
+
+### Added
+- **Phase 0 — Reality Check** (new). Three-question intake (time / target clarity / urgency) maps the user to a strictness tier: **light**, **standard** (default), or **deep**. Tier modifies how the rest of the skill runs — light tier skips SSOT setup, dossiers, cover letters for non-High-Match, and uses a minimal tracker. Declared to the user on entry so they can correct it. Rationale: the full 11-phase flow is over-engineered for a candidate with 2 hours per week and no urgency; a tier gate prevents Claude from pushing structural overhead users don't need.
+- **`references/coping.md`** (new). Emotional pacing reference with five parts: (1) 24-hour rejection protocol, (2) burnout early warning signals and 48-hour pause rule, (3) 30-minute pre-interview stabilization routine, (4) offer-fear reality data (rescission rate < 5% on polite counters), (5) sustainable weekly / monthly pacing rhythm. Hooked into Phase 8 (post-rejection), Phase 9 (pre-volume prescription), Phase 10 (pre-interview), Phase 11 (pre-counter). Explicitly scoped as "pragmatic pacing, not therapy" — points users to a professional if symptoms persist.
+- `evals/05-phase-0-light-tier.md` — guards against Claude defaulting to standard tier on a clearly-casual user and running full Phase 1 + dossier + full tracker.
+
+### Changed
+- **Lazy SSOT rolled out to every phase, not only Entry Triage.** Previously Triage Rule 1 said "SSOT is lazy" but Phase 1 Step 4 still wrote "Set up the Tier 1 SSOT" as a mandatory step, and Phase 5 / 10 / 11 implicitly assumed the SSOT already existed. Now:
+  - Phase 1 Step 4 rewritten: SSOT is created **on first Tier 1 commit**, not as a gate for downstream phases. Phase 1 itself is skipped unless the user is building from scratch or explicitly asks for intake.
+  - Phase 5 preamble added: "Does not require Phase 1 to be complete." Back-fill Tier 1 facts inline as they surface during customisation.
+  - Phase 10 clarified: do not route back to Phase 1 if no SSOT exists; back-fill inline.
+  - Phase 11 clarified: does not require pre-existing SSOT. Back-fill Tier 1 only if an offer fact is worth preserving for next negotiation.
+  - Triage rules expanded from 4 → 6 with explicit statements for lazy SSOT (rule 1), lazy dossiers (rule 2), and light-tier scoping (rule 6).
+- **Reference Loading Map** adds `coping.md` with trigger conditions (post-rejection for High Match, ≥ 15 apps in last 7 days, interview ≤ 48h, offer anxiety) and a Phase 0 row.
+- **SKILL.md top-of-file description** updated: "Phase 0 reality check plus 11 execution phases."
+- **Phase 4 dossier creation** now explicitly notes: *standard + deep tiers only*. Light tier skips dossiers; creates one only if reaching Phase 10 for that company.
+- **Phase 8 tracker columns** — light tier uses `Company · Role · Applied · Stage · Notes` (5 cols); standard / deep use full 16-col Part E.
+
+### Why
+Two related friction sources showed up in v0.5.0 usage: (a) users at the casual end of the spectrum were still being asked to stand up a Tier 1 SSOT on first contact, which killed activation for "just browsing" users, and (b) the skill had zero acknowledgment of the emotional dimension of job search — rejection, burnout, interview anxiety, offer fear. Both gaps reflected a skill designed as a structured execution pipeline rather than a companion process. v0.6.0 adds the shape-matching front door (Phase 0) and the missing coping layer (`coping.md`), and fixes the implicit "SSOT required" assumption that Entry Triage had only partially addressed.
+
+### Not changed
+- Hard Rules remain 8 (no additions).
+- No changes to `resume-standards.md`, `jd-analysis.md`, `build-script.md`, `cover-letter.md`, `interview-prep.md`, `salary-negotiation.md`, `company-dossier-template.md`, `company-research.md`, `post-application.md`, `referral-strategy.md`, `sync-rules.md`, or `context-doc-template.md`. Execution-layer references are stable; v0.6.0 is entry / pacing layer only.
+
+---
+
 ## 0.5.0 — 2026-04-17
 
 ### Changed (default behaviour)

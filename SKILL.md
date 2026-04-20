@@ -1,14 +1,14 @@
 ---
 name: job-application
-version: 0.5.0
+version: 0.6.0
 description: "End-to-end job application workflow: candidate profile intake, resume red-flag detection, ATS-compliant optimisation, company research, targeted job search, per-JD resume and cover letter customisation, timed submission, active follow-up, and response-rate diagnostics. Use this skill whenever the user wants to search for jobs, prepare or update a resume, generate customised resumes or cover letters for specific postings, track applications, diagnose low response rates, or manage the full job hunting pipeline. Trigger on phrases like 'apply for jobs', 'find me jobs', 'customise my resume', 'job search', 'help me apply', 'update my resume for this role', 'track my applications', 'I'm not getting callbacks', 'why am I not hearing back', or any variant of job hunting or career workflow."
 ---
 
 # Job Application Workflow
 
-A full-cycle job-search skill covering 11 phases from candidate intake through salary negotiation. This file is a **router** — it holds the workflow structure, triage logic, and the 8 hard rules. Every phase delegates depth to a `references/` file so this top-level document stays readable and token-efficient.
+A full-cycle job-search skill covering a brief Phase 0 reality check plus 11 execution phases from candidate intake through salary negotiation. This file is a **router** — it holds the workflow structure, triage logic, and the 8 hard rules. Every phase delegates depth to a `references/` file so this top-level document stays readable and token-efficient.
 
-**Phases:** [1. Candidate Intake](#phase-1--candidate-intake) · [2. Resume Assessment](#phase-2--base-resume-assessment) · [3. Job Search & Timing](#phase-3--job-search--timing) · [4. Company Research & Referral](#phase-4--company-research--referral-check) · [5. Per-JD Customisation](#phase-5--per-jd-resume-customisation) · [6. Cover Material](#phase-6--cover-material) · [7. Submission & Follow-up](#phase-7--submission--follow-up) · [8. Tracking](#phase-8--application-tracking) · [9. Response Diagnostics](#phase-9--response-rate-diagnostics) · [10. Interview Prep](#phase-10--interview-preparation) · [11. Offer & Negotiation](#phase-11--offer--salary-negotiation)
+**Phases:** [0. Reality Check](#phase-0--reality-check) · [1. Candidate Intake](#phase-1--candidate-intake) · [2. Resume Assessment](#phase-2--base-resume-assessment) · [3. Job Search & Timing](#phase-3--job-search--timing) · [4. Company Research & Referral](#phase-4--company-research--referral-check) · [5. Per-JD Customisation](#phase-5--per-jd-resume-customisation) · [6. Cover Material](#phase-6--cover-material) · [7. Submission & Follow-up](#phase-7--submission--follow-up) · [8. Tracking](#phase-8--application-tracking) · [9. Response Diagnostics](#phase-9--response-rate-diagnostics) · [10. Interview Prep](#phase-10--interview-preparation) · [11. Offer & Negotiation](#phase-11--offer--salary-negotiation)
 
 ---
 
@@ -18,6 +18,7 @@ Load only the references relevant to the current phase. All references live unde
 
 | Phase / Trigger | Load these references |
 |---|---|
+| **Phase 0** — reality check | *(none — the 3 questions live in this file)* |
 | **Phase 1** — intake | `context-doc-template.md` · `sync-rules.md` · `resume-standards.md` |
 | **Phase 2** — resume assessment | `resume-standards.md` |
 | **Phase 3** — search & timing | `jd-analysis.md` |
@@ -26,16 +27,46 @@ Load only the references relevant to the current phase. All references live unde
 | **Phase 6** — cover material | `cover-letter.md` |
 | **Phase 7** — submission & follow-up | `post-application.md` (follow-up template) |
 | **Phase 8** — tracking | `post-application.md` (tracker fields) |
-| **Phase 9** — response diagnostics | `resume-standards.md` · `post-application.md` |
-| **Phase 10** — interview prep | `interview-prep.md` · `company-dossier-template.md` |
-| **Phase 11** — offer & negotiation | `salary-negotiation.md` · `company-dossier-template.md` |
+| **Phase 9** — response diagnostics | `resume-standards.md` · `post-application.md` · `coping.md` (if ≥ 15 apps in last 7 days or candidate reports burnout) |
+| **Phase 10** — interview prep | `interview-prep.md` · `company-dossier-template.md` · `coping.md` (if interview in ≤ 48h, load Part 3) |
+| **Phase 11** — offer & negotiation | `salary-negotiation.md` · `company-dossier-template.md` · `coping.md` (if candidate expresses offer anxiety, load Part 4) |
+| Any rejection received for a High Match role | `coping.md` (Part 1 — 24-hour protocol) |
 | Any Tier 1 fact change | `sync-rules.md` (always) |
+
+---
+
+## Phase 0 — Reality Check
+
+Before routing to a phase, gauge the user's current capacity. The full 11-phase flow is designed for a candidate with real time, clear targets, and structural patience. A user applying in a 3-week emergency does not need an 11-section Tier 1 SSOT. A user with 2 hours per week should not be pushed through a dossier template for every High Match company. Match the skill's strictness to the user's situation.
+
+**Three quick questions** (ask only the ones not already obvious from context):
+
+1. **Time commitment.** Roughly how many hours per week can you put into this search?
+2. **Target clarity** (1–5). How clearly can you describe the role / industry / level you want?
+3. **Urgency.** Casual browse, active but flexible, or urgent (< 4 weeks runway)?
+
+**Map to a strictness tier:**
+
+| Strictness tier | When it applies | How the rest of the skill changes |
+|---|---|---|
+| **light** | ≤ 2 h/week · clarity ≤ 2 · or clearly casual | Skip Phase 1 SSOT setup. Skip company dossiers. Use a minimal tracker (just `Company · Role · Applied date · Stage`). Keep one master resume, customise only Summary per JD. Skip cover letters for Medium / Low Match. |
+| **standard** *(default)* | 3–10 h/week · clarity 3–4 · active search | Full flow as written below. SSOT created lazily on first Tier 1 write. Dossier for High Match only. Cover letter when JD asks or for High Match. |
+| **deep** | 10+ h/week · clarity 4–5 · urgent or career-pivot | Full flow + proactive SSOT + dossier for every High / Medium Match + full Phase 4a referral check before every application + tighter change-log discipline. Short deliberate rhythm (see `coping.md` Part 5). |
+
+**Declare the tier to the user** once chosen, in one sentence: *"Running in **light** mode — I'll skip the full profile setup and keep tracking minimal. Tell me if you want to switch to standard later."* The tier is a soft setting; the user can upshift or downshift between phases.
+
+**Tier is not a quality gate.** A light-tier application to a well-chosen role can out-perform a deep-tier application to a poorly-matched one. Strictness is about how much process the candidate can sustain, not about how "serious" they are.
+
+**Skip Phase 0 if:**
+
+- The user arrives with a specific, narrow request (e.g. "customise this resume for this JD") — treat as **standard** and route directly. Re-offer Phase 0 if they return with a broader ask.
+- The user has used this skill before and a `{{Name}}_Context_Master.md` already exists in the workspace. Assume continuity, but re-ask urgency if they mention a change in circumstances.
 
 ---
 
 ## Entry Triage — Route the User Before Starting
 
-Users arrive at this skill from very different situations. **Do not default to Phase 1.** At the start of any new invocation, quickly triage which phase the user actually needs.
+After (or alongside) Phase 0's strictness check, route the user to the phase that matches their situation. **Do not default to Phase 1.**
 
 **First question to ask** (if not already clear from context):
 > "Where are you in your job search right now?"
@@ -56,23 +87,29 @@ Route based on their answer:
 
 **Triage rules:**
 
-1. **SSOT is lazy.** Only create `{{Name}}_Context_Master.md` when the user first writes a Tier 1 fact — do not force Phase 1 setup on a user entering at Phase 10 or 11.
-2. **Do not force-read earlier phases.** Back-fill missing Tier 1 fields inline as they come up.
-3. **If the user is unsure,** ask 1–2 clarifying questions, then route. Never guess silently.
-4. **After completing the entry phase,** suggest the natural next phase without enforcing it.
+1. **SSOT is lazy — applies to every phase, not just entry.** Only create `{{Name}}_Context_Master.md` on the first commit of a Tier 1 fact (employer, title, dates, metric, degree, contact). Phases 2 / 3 / 5 / 10 / 11 must run without an SSOT if the user has not yet written one; back-fill missing fields inline as they come up. Never block a downstream phase on "the SSOT doesn't exist yet."
+2. **Dossiers are lazy too.** Only create `{{workspace}}/companies/{{Company}}.md` at Phase 4 (High Match, before cold-applying) or Phase 10 (interview invitation). Do not create empty dossiers for Medium / Low Match cold applies.
+3. **Do not force-read earlier phases.** Back-fill missing context inline; earlier phases are prerequisites only when a specific fact is actually needed downstream.
+4. **If the user is unsure,** ask 1–2 clarifying questions, then route. Never guess silently.
+5. **After completing the entry phase,** suggest the natural next phase without enforcing it.
+6. **Light-tier users skip most of Phases 1, 4, 8.** See Phase 0 for the per-tier differences.
 
 ---
 
 ## Phase 1 — Candidate Intake
 
-Build a complete candidate profile before doing anything else. Never rely on platform profiles (LinkedIn, Indeed) — they're often outdated. The authoritative source is the candidate's own resume file.
+Run Phase 1 only when the user is building a profile from scratch or explicitly asks to. Users entering later phases do not need to complete Phase 1 first — back-fill Tier 1 facts as they surface downstream.
+
+When Phase 1 is the right entry, the authoritative source is the candidate's own resume file; never rely on platform profiles (LinkedIn, Indeed) — they're often outdated.
 
 **Steps:**
 
 1. **Get the resume.** Ask the user to upload or share it. Extract text: `pandoc resume.docx -t plain`.
 2. **Confirm key facts** with the candidate, covering the sections in `references/context-doc-template.md` (identity · work history · projects & metrics · education · skills · target roles · work authorisation · LinkedIn URL).
 3. **LinkedIn gap check.** Confirm titles, dates, and companies match the resume. Flag any mismatch — HR cross-references, and discrepancies raise doubts.
-4. **Set up the Tier 1 SSOT.** Copy `references/context-doc-template.md` to the workspace, renaming it `{{CandidateName}}_Context_Master.md`. Write the facts there — not only in session memory. Every later phase reads from this file. After this, all fact updates follow `references/sync-rules.md` (Tier 1 first, propagate to Tier 2, flag Tier 3 as ⏳, append Change Log row).
+4. **Create the Tier 1 SSOT on first commit.** The first time the candidate confirms a hard fact in this session (or any later phase), create `{{CandidateName}}_Context_Master.md` by copying `references/context-doc-template.md` to the workspace, write the confirmed facts in, and follow `references/sync-rules.md` from that point (Tier 1 first, propagate to Tier 2, flag Tier 3 as ⏳, append Change Log row). If the user is only browsing or exploring, do **not** create the file — conversation-only is fine until a real Tier 1 write happens.
+
+**Light tier:** Steps 1–3 only. Skip Step 4 unless the candidate explicitly asks for a persistent profile doc.
 
 ---
 
@@ -118,13 +155,17 @@ A referral typically converts to an interview at roughly **3–5× the rate** of
 
 Read `references/company-research.md` for the full framework (stage, recent signals, why-this-role-exists, pain points). Do this **before** customising the resume — company context shapes Summary tone, which achievements to surface, and the cover note's angle.
 
-**Open a dossier for High Match companies.** Copy `references/company-dossier-template.md` to `{{workspace}}/companies/{{Company}}.md` and fill sections 1–5 as you research. For Medium/Low Match, skip the dossier until they respond — an empty file per cold apply is overhead.
+**Open a dossier for High Match companies** (standard + deep tiers). Copy `references/company-dossier-template.md` to `{{workspace}}/companies/{{Company}}.md` and fill sections 1–5 as you research. For Medium/Low Match, skip the dossier until they respond — an empty file per cold apply is overhead.
+
+**Light tier:** skip the dossier entirely. Keep company research in-chat; only create a dossier if the candidate reaches Phase 10 for this company.
 
 ---
 
 ## Phase 5 — Per-JD Resume Customisation
 
 Read `references/jd-analysis.md` for the full keyword, gap, and placement framework; `references/resume-standards.md` for content standards; `references/build-script.md` for generation.
+
+**Does not require Phase 1 to be complete.** If the candidate goes straight to Phase 5 with a JD and a resume, customise against what's in the resume. Back-fill any missing Tier 1 fact (e.g., a metric or date inconsistency you catch) into `{{Name}}_Context_Master.md` — creating the file if this is the first Tier 1 commit.
 
 1. **Gap analysis + keyword matrix.** Map every JD requirement to the candidate's resume. Never add skills the candidate doesn't have.
 2. **Keyword placement (natural, not stuffed).** Modern ATSs (Workday, Greenhouse, Lever, Ashby) parse into fields — real screening is done by recruiters. Keyword-density scoring is largely a myth. Confirm each top keyword appears **at least once in the Summary or a work bullet**. Do not force the same keyword into every section — that reads as stuffing.
@@ -167,6 +208,10 @@ Update Stage and Outcome immediately after each action. A stale tracker is usele
 
 **Do not prompt the candidate to connect Notion, Google Sheets, or Airtable.** Only route to an adapter if the candidate **explicitly** asks for one — see `post-application.md` **Part E.1 (Notion adapter)** and **Part E.2 (Google Sheets adapter)**. These are opt-in upgrades, not defaults.
 
+**Light tier:** keep tracker columns minimal — `Company · Role · Applied date · Stage · Notes`. Skip Match Level, Apply Method, Follow-up dates, and Resume File path unless the candidate asks for them later.
+
+**On receiving a rejection for a High Match role (any tier):** load `references/coping.md` Part 1 and run the 24-hour protocol before queuing a replacement application.
+
 ---
 
 ## Phase 9 — Response Rate Diagnostics
@@ -180,13 +225,17 @@ Trigger when the candidate has applied to **10+ roles with fewer than 2 response
 
 Output: 1–2 resume fixes, any targeting adjustment, any timing adjustment, any red flag to address proactively.
 
+**Burnout check before prescribing more volume.** If the candidate has submitted ≥ 15 applications in the last 7 days, or reports low sleep / emotional flatness / inability to describe why they want the target role, load `references/coping.md` Part 2 and run the burnout check first. Do not recommend "apply to more" when the signal is fatigue, not targeting.
+
 ---
 
 ## Phase 10 — Interview Preparation
 
-Trigger on interview invitation. Read `references/interview-prep.md` for STAR framework, per-interview-type question banks, and thank-you email template.
+Trigger on interview invitation. Read `references/interview-prep.md` for STAR framework, per-interview-type question banks, and thank-you email template. Do **not** route this phase back to Phase 1 if no SSOT exists — back-fill any missing facts inline as they come up.
 
 **Open the company dossier first.** If one doesn't exist, copy `references/company-dossier-template.md` to `{{workspace}}/companies/{{Company}}.md` and fill sections 1–5 from existing research. Every round and every subsequent touchpoint logs there. If it exists, re-read sections 4 (JD excerpt) and 5 (research notes) so prep stays anchored.
+
+**If interview is in ≤ 48 hours:** also load `references/coping.md` Part 3 (pre-interview stabilization) and run it with the candidate at T–30 minutes. Preparation quality has diminishing returns past a point; nervous-system regulation often doesn't.
 
 **Within 24 hours of invitation:** confirm logistics; re-read the exact JD and the resume version submitted; prepare 5–6 STAR stories mapped to the JD's top requirements; research interviewers on LinkedIn (add to dossier section 6); prepare 3 questions to ask.
 
@@ -199,6 +248,10 @@ Trigger on interview invitation. Read `references/interview-prep.md` for STAR fr
 ## Phase 11 — Offer & Salary Negotiation
 
 Trigger on verbal or written offer. Read `references/salary-negotiation.md` for full anchoring principles, counter scripts, and non-salary negotiation paths.
+
+Phase 11 does not require a pre-existing SSOT — if one doesn't exist, capture the offer details directly in the dossier (section 8 Offer Log) and back-fill Tier 1 only if a fact from the offer (e.g., new salary baseline) is worth preserving for the next negotiation.
+
+**If the candidate expresses anxiety about countering or fear of rescission:** load `references/coping.md` Part 4 before writing the counter. The fear is usually over-calibrated relative to the actual rescission rate; the candidate deserves the numbers.
 
 **Immediate actions on receiving an offer:**
 
