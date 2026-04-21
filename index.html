@@ -6,6 +6,12 @@
   <title>job-application — a Claude Cowork skill</title>
   <meta name="description" content="A full-cycle job application skill for Claude Cowork. Candidate profile, ATS-safe resumes, timing-aware search, referrals, interview prep, offer negotiation." />
   <meta name="theme-color" content="#f6f3ec" />
+  <meta property="og:title" content="job-application — a Claude Cowork skill" />
+  <meta property="og:description" content="A full-cycle job application skill for Claude Cowork. Intake, ATS-safe resumes, search, referrals, interviews, negotiation." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://github.com/YizhuangLin/job-application" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23697d4a'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,500;0,600;1,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -20,7 +26,7 @@
       --paper-2:     hsl(38 24% 94%);
       --ink:         hsl(160 16% 14%);
       --ink-soft:    hsl(160 12% 32%);
-      --ink-mute:    hsl(160 8% 48%);
+      --ink-mute:    hsl(160 10% 40%);
 
       --moss:        hsl(82 22% 62%);
       --moss-deep:   hsl(88 24% 36%);
@@ -91,11 +97,17 @@
       pointer-events: none;
     }
     .blob-1 { width: 52vw; height: 52vw; top: -14vh; left: -10vw;
-              background: radial-gradient(circle at 30% 30%, hsla(82 50% 70% / 0.9), hsla(82 40% 65% / 0) 70%); }
+              background: radial-gradient(circle at 30% 30%, hsla(82 50% 70% / 0.9), hsla(82 40% 65% / 0) 70%);
+              animation: drift-1 24s ease-in-out infinite alternate; }
     .blob-2 { width: 46vw; height: 46vw; top: 30vh; right: -14vw;
-              background: radial-gradient(circle at 60% 40%, hsla(32 60% 78% / 0.85), hsla(32 50% 75% / 0) 70%); }
+              background: radial-gradient(circle at 60% 40%, hsla(32 60% 78% / 0.85), hsla(32 50% 75% / 0) 70%);
+              animation: drift-2 28s ease-in-out infinite alternate; }
     .blob-3 { width: 40vw; height: 40vw; bottom: -10vh; left: 20vw;
-              background: radial-gradient(circle at 50% 50%, hsla(88 35% 60% / 0.5), hsla(88 35% 60% / 0) 70%); }
+              background: radial-gradient(circle at 50% 50%, hsla(88 35% 60% / 0.5), hsla(88 35% 60% / 0) 70%);
+              animation: drift-3 32s ease-in-out infinite alternate; }
+    @keyframes drift-1 { to { transform: translate(14%, 12%) scale(1.12); } }
+    @keyframes drift-2 { to { transform: translate(-16%, -10%) scale(1.18); } }
+    @keyframes drift-3 { to { transform: translate(18%, -14%) scale(1.08); } }
 
     /* Typography — size + weight do the work */
     h1, h2, h3, h4 { margin: 0; color: var(--ink); letter-spacing: -0.012em; }
@@ -350,10 +362,22 @@
     .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s ease; }
     .reveal.in { opacity: 1; transform: translateY(0); }
 
+    /* Grid cells must opt-in to shrinking below content size */
+    .install-step > div:not(.num) { min-width: 0; }
+    .phases .ph-body { min-width: 0; }
+
+    /* Tab bar: allow wrapping on narrow screens */
+    @media (max-width: 480px) {
+      .tabs { display: flex; flex-wrap: wrap; width: 100%; border-radius: var(--radius-md); }
+      .tab { flex: 1 1 auto; padding: 9px 12px; font-size: 13px; text-align: center; border-radius: var(--radius-sm); }
+      /* Contain blobs so they don't cause iOS overflow/scroll */
+      .blob-2 { right: -8vw; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .blob { animation: none !important; }
       .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
-      * { transition: none !important; animation-duration: 0.01ms !important; }
+      .tab-panel.active { animation: none !important; }
     }
     :focus-visible { outline: 2px solid var(--moss-deep); outline-offset: 3px; border-radius: 4px; }
 
@@ -402,7 +426,7 @@
   </nav>
 
   <!-- ========= CONTENT BEGIN ========= -->
-  <main id="top">
+  <main id="top" tabindex="-1">
 
     <!-- HERO -->
     <section class="hero">
@@ -437,24 +461,24 @@
         <div class="glass reveal">
           <div class="phases">
             <div class="ph-band">Setup · 0–2</div>
-            <div class="ph-row"><div class="ph-num">0</div><div class="ph-body"><strong>Reality check.</strong> <span>3 questions → assigns a tier (light / standard / deep).</span></div></div>
-            <div class="ph-row"><div class="ph-num">1</div><div class="ph-body"><strong>Candidate intake.</strong> <span>Builds a profile from your resume; flags LinkedIn mismatches.</span></div></div>
-            <div class="ph-row"><div class="ph-num">2</div><div class="ph-body"><strong>Resume assessment.</strong> <span>ATS compliance, red flags, 1-page compression.</span></div></div>
+            <div class="ph-row"><div class="ph-num">0</div><div class="ph-body"><strong>Reality check.</strong> <span>Asks 3 questions and assigns a tier (light / standard / deep).</span></div></div>
+            <div class="ph-row"><div class="ph-num">1</div><div class="ph-body"><strong>Candidate intake.</strong> <span>Builds a profile from your resume and flags LinkedIn mismatches.</span></div></div>
+            <div class="ph-row"><div class="ph-num">2</div><div class="ph-body"><strong>Resume assessment.</strong> <span>Checks ATS compliance, flags red flags, and compresses to one page.</span></div></div>
 
             <div class="ph-band">Search &amp; apply · 3–7</div>
-            <div class="ph-row"><div class="ph-num">3</div><div class="ph-body"><strong>Job search.</strong> <span>Live search via MCP; flags postings older than 2 weeks.</span></div></div>
+            <div class="ph-row"><div class="ph-num">3</div><div class="ph-body"><strong>Job search.</strong> <span>Searches live via MCP and flags postings older than 2 weeks.</span></div></div>
             <div class="ph-row"><div class="ph-num">4</div><div class="ph-body"><strong>Company research &amp; referral check.</strong> <span>Checks your network before cold-applying.</span></div></div>
-            <div class="ph-row"><div class="ph-num">5</div><div class="ph-body"><strong>Per-JD resume.</strong> <span>Keyword matrix, gap analysis, targeted rewrite.</span></div></div>
+            <div class="ph-row"><div class="ph-num">5</div><div class="ph-body"><strong>Per-JD resume.</strong> <span>Builds a keyword matrix, analyzes gaps, and rewrites for the JD.</span></div></div>
             <div class="ph-row"><div class="ph-num">6</div><div class="ph-body"><strong>Cover material.</strong> <span>Decides format (formal / short note / none) and drafts it.</span></div></div>
-            <div class="ph-row"><div class="ph-num">7</div><div class="ph-body"><strong>Submit &amp; follow-up.</strong> <span>One follow-up scheduled day 5–7. Never more.</span></div></div>
+            <div class="ph-row"><div class="ph-num">7</div><div class="ph-body"><strong>Submit &amp; follow-up.</strong> <span>Schedules one follow-up on day 5–7 — never more.</span></div></div>
 
             <div class="ph-band">Track · 8–9</div>
-            <div class="ph-row"><div class="ph-num">8</div><div class="ph-body"><strong>Tracking.</strong> <span>Flat <code>applications.md</code> by default. Notion / Sheets optional.</span></div></div>
-            <div class="ph-row"><div class="ph-num">9</div><div class="ph-body"><strong>Response-rate diagnostics.</strong> <span>Triggers at 10+ apps with &lt; 2 replies; surfaces root cause.</span></div></div>
+            <div class="ph-row"><div class="ph-num">8</div><div class="ph-body"><strong>Tracking.</strong> <span>Tracks in flat <code>applications.md</code> by default; Notion / Sheets optional.</span></div></div>
+            <div class="ph-row"><div class="ph-num">9</div><div class="ph-body"><strong>Response-rate diagnostics.</strong> <span>Triggers at 10+ apps with &lt; 2 replies and surfaces the root cause.</span></div></div>
 
             <div class="ph-band">Close · 10–11</div>
-            <div class="ph-row"><div class="ph-num">10</div><div class="ph-body"><strong>Interview prep.</strong> <span>STAR stories, question bank, thank-you email.</span></div></div>
-            <div class="ph-row"><div class="ph-num">11</div><div class="ph-body"><strong>Offer &amp; negotiation.</strong> <span>Package evaluation, counter scripts, anchoring.</span></div></div>
+            <div class="ph-row"><div class="ph-num">10</div><div class="ph-body"><strong>Interview prep.</strong> <span>Drafts STAR stories, a question bank, and the thank-you email.</span></div></div>
+            <div class="ph-row"><div class="ph-num">11</div><div class="ph-body"><strong>Offer &amp; negotiation.</strong> <span>Evaluates the package, writes counter scripts, and coaches anchoring.</span></div></div>
           </div>
         </div>
       </div>
@@ -495,12 +519,12 @@
         </div>
 
         <div class="glass reveal" data-tab-group="install">
-          <div class="tabs" role="tablist">
-            <button class="tab active" data-tab="skill" role="tab" aria-selected="true">Download .skill</button>
-            <button class="tab" data-tab="git" role="tab" aria-selected="false">Clone from GitHub</button>
+          <div class="tabs" role="tablist" aria-label="Install method">
+            <button class="tab active" id="tab-skill" data-tab="skill" role="tab" aria-selected="true" aria-controls="panel-skill" tabindex="0">Download .skill</button>
+            <button class="tab" id="tab-git" data-tab="git" role="tab" aria-selected="false" aria-controls="panel-git" tabindex="-1">Clone from GitHub</button>
           </div>
 
-          <div class="tab-panel active" data-panel="skill">
+          <div class="tab-panel active" id="panel-skill" data-panel="skill" role="tabpanel" aria-labelledby="tab-skill" tabindex="0">
             <div class="install-steps">
               <div class="install-step">
                 <div class="num">1</div>
@@ -527,7 +551,7 @@
             </div>
           </div>
 
-          <div class="tab-panel" data-panel="git">
+          <div class="tab-panel" id="panel-git" data-panel="git" role="tabpanel" aria-labelledby="tab-git" tabindex="0">
             <div class="install-steps">
               <div class="install-step">
                 <div class="num">1</div>
@@ -637,17 +661,8 @@ git clone https://github.com/YizhuangLin/job-application.git</code></pre>
     </div>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
   <script defer>
     window.addEventListener('DOMContentLoaded', () => {
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-      if (!reduced && window.gsap) {
-        gsap.to('.blob-1', { xPercent: 14, yPercent: 12, scale: 1.12, duration: 24, ease: 'sine.inOut', repeat: -1, yoyo: true });
-        gsap.to('.blob-2', { xPercent: -16, yPercent: -10, scale: 1.18, duration: 28, ease: 'sine.inOut', repeat: -1, yoyo: true });
-        gsap.to('.blob-3', { xPercent: 18, yPercent: -14, scale: 1.08, duration: 32, ease: 'sine.inOut', repeat: -1, yoyo: true });
-      }
-
       if ('IntersectionObserver' in window) {
         const io = new IntersectionObserver((entries) => {
           entries.forEach((e) => {
@@ -660,14 +675,28 @@ git clone https://github.com/YizhuangLin/job-application.git</code></pre>
       }
 
       document.querySelectorAll('[data-tab-group]').forEach((group) => {
-        const tabs = group.querySelectorAll('.tab');
+        const tabs = Array.from(group.querySelectorAll('.tab'));
         const panels = group.querySelectorAll('.tab-panel');
-        tabs.forEach((t) => {
-          t.addEventListener('click', () => {
-            const name = t.getAttribute('data-tab');
-            tabs.forEach((x) => { x.classList.remove('active'); x.setAttribute('aria-selected', 'false'); });
-            t.classList.add('active'); t.setAttribute('aria-selected', 'true');
-            panels.forEach((p) => p.classList.toggle('active', p.getAttribute('data-panel') === name));
+        const activate = (t, focus) => {
+          const name = t.getAttribute('data-tab');
+          tabs.forEach((x) => {
+            const on = x === t;
+            x.classList.toggle('active', on);
+            x.setAttribute('aria-selected', on ? 'true' : 'false');
+            x.setAttribute('tabindex', on ? '0' : '-1');
+          });
+          panels.forEach((p) => p.classList.toggle('active', p.getAttribute('data-panel') === name));
+          if (focus) t.focus();
+        };
+        tabs.forEach((t, i) => {
+          t.addEventListener('click', () => activate(t, false));
+          t.addEventListener('keydown', (e) => {
+            let next = null;
+            if (e.key === 'ArrowRight') next = tabs[(i + 1) % tabs.length];
+            else if (e.key === 'ArrowLeft') next = tabs[(i - 1 + tabs.length) % tabs.length];
+            else if (e.key === 'Home') next = tabs[0];
+            else if (e.key === 'End') next = tabs[tabs.length - 1];
+            if (next) { e.preventDefault(); activate(next, true); }
           });
         });
       });
