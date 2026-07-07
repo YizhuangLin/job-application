@@ -1,0 +1,21 @@
+{#-
+  _header.html.j2 — 共享页头宏（name 行 + contact 行）
+  ============================================================
+  resume.html.j2 和 cl.html.j2 都调用 header(contact, divider=...) 生成页头 HTML，
+  保证两个文档的页头强制同源（同一个宏 = 不会出现两边 HTML 结构漂移）。
+
+  参数：
+    contact: {name: str, line: str}
+    divider: bool（默认 false）—— CL 页头比 resume 多一条 contact 行下分隔线，
+             对应 _theme.css.j2 里的 .contact--divider 覆盖类。
+             这是有意的视觉差异（CL 需要跟正文分隔），显式用参数表达，不做隐藏差异。
+
+  用法（在文档模板里）：
+    from '_header.html.j2' import header
+    header(contact)                 -- resume：无分隔线
+    header(contact, divider=true)   -- cl：带分隔线
+-#}
+{% macro header(contact, divider=false) %}
+  <div class="name">{{ contact.name | e }}</div>
+  <div class="contact{{ ' contact--divider' if divider else '' }}">{{ contact.line | e }}</div>
+{%- endmacro %}

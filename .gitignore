@@ -2,3 +2,5 @@
 .claude/
 landing.html
 *.bak
+__pycache__/
+.last_update_check

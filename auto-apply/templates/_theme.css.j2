@@ -1,0 +1,49 @@
+{#-
+  _theme.css.j2 — 共享设计 token（Editorial Classic 视觉系统）
+  ============================================================
+  单一来源：resume.html.j2 和 cl.html.j2 都 include 本文件到各自 <style> 里。
+  两个文档模板共用的颜色 / 字体 / 页头样式全部定义在这里；
+  文档级差异（body 字号行高、@page margin）留在各自模板里，
+  但差异化覆盖也必须引用这里的 var(--...) token，不得重新写死颜色/字体值。
+
+  渲染引擎说明：
+    - Playwright/Chromium（主渲染路径）完整支持 CSS 自定义属性（var()）。
+    - WeasyPrint（回退路径）69.x 起也支持 var()，但本环境因缺 native Pango/GObject
+      库无法验证 WeasyPrint 实际渲染。CSS var 方案照常保留，因为 Chromium 已实测可行，
+      且 WeasyPrint 官方文档明确支持 CSS Custom Properties。若未来发现 WeasyPrint 环境
+      不支持，可把这里的变量改成 render_html() 统一注入的 Jinja2 dict，模板改用
+      {{ theme.xxx }} 引用，无需再动 HTML 结构。
+
+  改版式 = 改这个文件（或下面两个模板的差异化覆盖段）+ git commit 留痕。
+  任何单次投递都不得为了某一份简历修改这里。
+-#}
+:root {
+  --font-body: 'IBM Plex Serif', Georgia, serif;
+  --color-ink: #1a1a1a;
+  --color-name: #111;
+  --color-muted: #4a4a4a;
+  --color-dim: #555;
+  --rule: 0.6pt solid #1a1a1a;
+  --name-size: 20pt;
+  --contact-size: 8.5pt;
+}
+
+/* ---- 共享页头样式（name + contact 行），resume / cl 共用 ---- */
+.name {
+  font-size: var(--name-size);
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 3pt 0;
+  color: var(--color-name);
+}
+.contact {
+  font-size: var(--contact-size);
+  text-align: center;
+  color: var(--color-muted);
+  margin: 0 0 10pt 0;
+}
+/* CL 专属：contact 行下加分隔线（比 resume 多一层差异化覆盖，由 header 宏的 divider 参数触发） */
+.contact--divider {
+  padding-bottom: 8pt;
+  border-bottom: var(--rule);
+}

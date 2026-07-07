@@ -22,6 +22,7 @@ Automated harness is out of scope for v0.4. The scenarios are authored so a huma
 | `03-keyword-placement.md` | Phase 5 (customising resume for a JD) | Claude recommending keyword-density stuffing (resurrection of the density myth removed in 0.4.0) |
 | `04-tracker-default-markdown.md` | Phase 8 (first application logged) | Claude prompting for a Notion / Sheets connector instead of writing to `{{workspace}}/applications.md` (0.5.0 default-backend change) |
 | `05-phase-0-light-tier.md` | Phase 0 (casual user, 2h/week) | Claude defaulting to standard tier and running full Phase 1 + dossier + full tracker when Phase 0 should route to **light** tier (0.6.0 Reality Check) |
+| `06-engine-pipeline.md` | Engine Mode (workspace contains `auto-apply/`) | Claude hand-editing generated tracker tables or drafting a resume outside the `build.py` pipeline when the engine is present (1.0.0 Engine Mode) |
 
 ## Adding a new scenario
 

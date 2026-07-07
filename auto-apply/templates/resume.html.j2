@@ -1,0 +1,125 @@
+{#-
+  resume.html.j2 — Editorial Classic 模板（视觉源自 _spike/designs/design_A.html）
+  ============================================================
+  输入 dict 形状（同 build.py assemble_content() 返回）：
+    contact:  {name: str, line: str}
+    summary:  str（已应用 rewritten 与 bilingual 删减）
+    experience: [{title, date, org_line, bullets: [str]}]
+    education:  [{degree, date, org_line}]
+    skills:     [{label, body}]
+    fonts_css:  str（fonts.css 全文，由 html_render.py 注入，避免外链）
+
+  约束：
+    - 1 页硬上限（HTML 路径不实现 page_compression，超页 → build.py make FAIL）
+    - 所有变量必须 |e 转义（防 HTML 注入）
+    - heading 不用 letter-spacing+text-transform 组合（pdftotext 字间距问题）
+    - 字号 body 9pt / 行高 1.2，已验证 ATS 友好（pdftotext 干净）
+
+  版式来源（2026-07 重构）：
+    - 页头（name + contact 行）来自共享宏 templates/_header.html.j2，跟
+      cl.html.j2 强制同源，不在本文件重复定义 HTML。
+    - 颜色/字体/页头样式 token 来自共享文件 templates/_theme.css.j2（CSS 自定义
+      属性，Playwright/Chromium 渲染路径已实测支持）。本文件的 <style> 只保留
+      resume 专属的 body 字号行高 / @page margin / 各 section 排版规则，且
+      写死颜色处一律引用 var(--...) token，不重复硬编码色值。
+    - 任何会话不得为单份简历改这个文件；调版式改 _theme.css.j2 / _header.html.j2。
+-#}
+{% from '_header.html.j2' import header %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ contact.name | e }} — Resume</title>
+<style>
+{{ fonts_css }}
+{% include '_theme.css.j2' %}
+
+@page { size: letter; margin: 0.4in 0.55in; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  font-size: 9pt;
+  line-height: 1.2;
+  color: var(--color-ink);
+}
+h2 {
+  font-size: 9.5pt;
+  font-weight: 700;
+  text-align: center;
+  margin: 6pt 0 3pt 0;
+  padding: 1.5pt 0;
+  border-top: var(--rule);
+  border-bottom: var(--rule);
+  color: var(--color-ink);
+}
+.summary { margin: 0 0 1pt 0; }
+.job { margin-bottom: 5pt; }
+.job-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 1pt;
+}
+.job-title { font-weight: 700; font-size: 9.5pt; }
+.job-date { font-style: italic; font-size: 8.5pt; color: var(--color-dim); }
+.job-org { font-size: 8.5pt; color: var(--color-dim); margin: 0 0 2pt 0; }
+ul { margin: 0; padding-left: 14pt; }
+li { margin-bottom: 1.5pt; }
+.edu { margin-bottom: 3pt; }
+.edu-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.edu-degree { font-weight: 700; font-size: 9.5pt; }
+.edu-date { font-style: italic; font-size: 8.5pt; color: var(--color-dim); }
+.edu-org { font-size: 8.5pt; color: var(--color-dim); margin: 0; }
+.skill-row { display: flex; margin-bottom: 1.5pt; }
+.skill-label { font-weight: 700; flex-shrink: 0; width: 100pt; }
+.skill-body { flex: 1; }
+</style>
+</head>
+<body>
+  {{ header(contact) }}
+
+  <h2>Summary</h2>
+  <p class="summary">{{ summary | e }}</p>
+
+  <h2>Experience</h2>
+  {%- for exp in experience %}
+  <div class="job">
+    <div class="job-head">
+      <span class="job-title">{{ exp.title | e }}</span>
+      <span class="job-date">{{ exp.date | e }}</span>
+    </div>
+    <div class="job-org">{{ exp.org_line | e }}</div>
+    {%- if exp.bullets %}
+    <ul>
+    {%- for b in exp.bullets %}
+      <li>{{ b | e }}</li>
+    {%- endfor %}
+    </ul>
+    {%- endif %}
+  </div>
+  {%- endfor %}
+
+  <h2>Education</h2>
+  {%- for edu in education %}
+  <div class="edu">
+    <div class="edu-head">
+      <span class="edu-degree">{{ edu.degree | e }}</span>
+      <span class="edu-date">{{ edu.date | e }}</span>
+    </div>
+    <div class="edu-org">{{ edu.org_line | e }}</div>
+  </div>
+  {%- endfor %}
+
+  <h2>Skills</h2>
+  {%- for sk in skills %}
+  <div class="skill-row">
+    <span class="skill-label">{{ sk.label | e }}</span>
+    <span class="skill-body">{{ sk.body | e }}</span>
+  </div>
+  {%- endfor %}
+</body>
+</html>

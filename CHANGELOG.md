@@ -4,6 +4,28 @@ All notable changes to the `job-application` skill are documented here. Format f
 
 ---
 
+## 1.0.0 — 2026-07-07
+
+### Added (architecture upgrade — hence the major bump)
+- **Execution engine at `auto-apply/`** — the skill is no longer prose-only. A local Python CLI (`build.py`) executes Phases 5–8 as a deterministic pipeline: `init` (workspace scaffold) · `status` (session entry: pipeline overview + today's actions + consistency self-check) · `prep` (JD capture with a hard archiving gate) · `prompt` (render verifier / quality-review agent prompts) · `factcheck-pass` / `make` / `qualreview-pass` / `review` (anti-fabrication chain with content-hash locking and a four-check pre-submit gate) · `submit` / `close` / `tracker` (generated tracker tables — single state source is one `APP###.yaml` per application) · `dashboard` · `fact` · `selftest`. Rendering is local (Playwright → WeasyPrint fallback) with bundled IBM Plex fonts (SIL OFL); layout lives only in `auto-apply/templates/`, and over-length resumes must cut content — font/margin shrinking has no code path.
+- **`workspace.yaml` configuration layer** — all per-user settings (`resume_layout.max_pages`, `paths.ssot` / `paths.applications`, `fact_redlines`, `strategy_rules`) live in one file in the user's workspace. Adjusting a rule = editing one line + a git commit, never editing engine code.
+- **De-personalised agent prompt templates.** `jobs/_verifier_prompt.md` and `jobs/_quality_review_prompt.md` are placeholder templates (`{{APP_ID}}`, `{{SSOT_PATH}}`, `{{CANDIDATE_NAME}}`, `{{FACT_REDLINES}}`, `{{STRATEGY_RULES}}`) rendered by `build.py prompt --app APP### --type verifier|qualreview`. Fact redlines (mis-spelled client names, non-demotable titles, currency rules) are injected from `workspace.yaml`, so the shipped templates contain no user-specific facts.
+- **Engine lint** (`selftest` item 7) — scans `auto-apply/*.py`, `templates/*`, and both prompt templates for person-specific hardcoded strings; any regression fails selftest.
+- **`SKILL.md` Engine Mode section** — when the workspace contains `auto-apply/` + `workspace.yaml`, Claude routes Phases 5–8 through engine commands under a 5-rule session contract (`auto-apply/SKILL.md`); without the engine, the prose phases run unchanged.
+- **Update notifications** — `build.py check-update` (manual upstream version check: GitHub release tag, default-branch `SKILL.md` fallback, or `git fetch` for clone installs) plus a 30-day local-only reminder in `status`/`selftest`. The check command is the only code path that touches the network, and only on explicit invocation; recommended zero-setup alternative is GitHub Watch → Releases.
+- `evals/06-engine-pipeline.md` — guards against Claude hand-editing generated tracker tables or drafting resumes outside the pipeline when the engine is present.
+
+### Changed
+- README: engine quickstart, requirements (Python 3.10+, pyyaml, Playwright/Chromium or WeasyPrint, poppler-utils), privacy note (all local, external mirrors opt-in), and updated file structure.
+
+### Why
+The prose skill could recommend discipline but not enforce it. Real-world usage (44 tracked applications) surfaced failures that only a machine gate prevents: applications submitted without an archived JD (impossible to re-audit later), resume claims drifting past the fact base, tracker/table drift from hand edits. v1.0.0 ships the engine that closed those holes, generalised for any user: reusability was validated with an `init`-scaffolded fictional-persona drill, and person-specific data was moved out of code and templates into `workspace.yaml` (enforced by engine lint).
+
+### Compatibility
+- The prose workflow (Phases 0–11, references, tiers) is unchanged and remains fully usable without the engine — the engine is opt-in by presence.
+- Protocol note: the fact-check result token is `NEEDS-USER` ("needs the candidate's own ruling"). The engine also carries no built-in personal data: lint patterns derive from `workspace.yaml` `lint_patterns` + the master resume contact name, and reports produced by older template versions remain accepted by `factcheck-pass` for backward compatibility.
+
+
 ## 0.6.0 — 2026-04-17
 
 ### Added

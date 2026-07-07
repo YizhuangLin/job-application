@@ -50,6 +50,42 @@ The skill covers a brief Phase 0 reality check plus 11 execution phases in a sin
 
 ---
 
+## The engine (v1.0) — deterministic resume pipeline
+
+New in 1.0: the repo bundles an optional **execution engine** at `auto-apply/` — a local-only Python CLI that turns Phases 5–8 from free-form document editing into a verifiable pipeline. Each application gets one `APP###.yaml` data file (single state source); the tracker tables, dashboard, and status view are regenerated from it, never hand-edited.
+
+What it enforces that prose alone can't:
+
+- **JD archiving gate** — `prep` refuses to proceed without the raw JD text, so every application can be re-audited later.
+- **Anti-fabrication chain** — the rewriting session and an independent fact-check agent are isolated; the verifier prompt is rendered by `build.py prompt` from a placeholder template plus your `workspace.yaml` redlines; a PASS is locked with a content hash, and `make`/`review` refuse to run if the content changed after locking.
+- **Page-limit gate** — over-length output must cut content; shrinking fonts/margins is not an available code path.
+- **Pre-submit gate** — `review` requires fact-check PASS, layout check, quality rating, and JD archive, all green.
+- **Engine lint** — `selftest` scans the engine and prompt templates for any person-specific hardcoding; personalisation lives only in `workspace.yaml` (`max_pages`, `paths`, `fact_redlines`, `strategy_rules`).
+
+Quickstart:
+
+```bash
+cp -r auto-apply/ /path/to/your-workspace/auto-apply/
+cd /path/to/your-workspace
+python3 auto-apply/build.py init        # one-time scaffold: workspace.yaml, SSOT template, master_resume.yaml, applications.md
+python3 auto-apply/build.py selftest    # verify environment (rendering path, deps, engine lint)
+python3 auto-apply/build.py status      # session entry point from then on
+```
+
+Engine requirements (beyond the base skill): Python 3.10+, `pyyaml`, Playwright + Chromium (PDF rendering; WeasyPrint works as a fallback), and poppler-utils (`pdfinfo` / `pdftotext` for layout checks). Everything runs locally — no data leaves your machine; external mirrors (e.g. Notion) are opt-in and manual. Bundled IBM Plex fonts are under the SIL Open Font License.
+
+**Staying up to date.** Three layers, strictest-privacy first:
+
+1. **GitHub notifications (recommended, zero setup)** — Watch → Custom → **Releases** on this repo; GitHub emails you on every release.
+2. **Manual check** — `python3 auto-apply/build.py check-update` compares your local `ENGINE_VERSION` against the latest GitHub release (falling back to the default branch's `SKILL.md` version). If you installed via `git clone`, it uses `git fetch` instead. This is the **only** engine command that touches the network, and only when you run it.
+3. **Local reminder** — `status` and `selftest` print a one-line nag when no check has run in 30+ days. The nag itself is a pure local timestamp read (`auto-apply/.last_update_check`, gitignored) — no request is ever sent implicitly. For a fully automated cadence, put `python3 auto-apply/build.py check-update` in a weekly cron job yourself; the engine deliberately never phones home on its own.
+
+Updating is a copy: fetch the new `auto-apply/` and overwrite your workspace copy — your `workspace.yaml`, SSOT, `master_resume.yaml`, and `jobs/` data live outside the engine and are never touched.
+
+The session contract Claude follows in engine mode is `auto-apply/SKILL.md`; the data-file spec is `auto-apply/jobs/_schema.md`.
+
+---
+
 ## Requirements
 
 - **Claude Cowork** (desktop app) — available at [claude.ai](https://claude.ai)
@@ -96,7 +132,16 @@ job-application/
 │   ├── 02-interview-prep-lazy-ssot.md ← Guards Phase 10 against forced Phase 1 setup
 │   ├── 03-keyword-placement.md        ← Guards against keyword-density stuffing
 │   ├── 04-tracker-default-markdown.md ← Guards Phase 8 default backend (markdown, not Notion)
-│   └── 05-phase-0-light-tier.md       ← Guards Phase 0 routing casual users to light tier
+│   ├── 05-phase-0-light-tier.md       ← Guards Phase 0 routing casual users to light tier
+│   └── 06-engine-pipeline.md          ← Guards Engine Mode: use build.py commands, don't hand-edit generated tables
+├── auto-apply/                        ← Execution engine (v1.0, optional — copy into your workspace)
+│   ├── SKILL.md                       ← Engine session contract (5 rules + command map)
+│   ├── build.py                       ← Pipeline CLI: init/status/prep/prompt/factcheck-pass/make/qualreview-pass/review/submit/close/tracker/dashboard/fact/selftest
+│   ├── html_render.py · docx_render.py ← Local PDF/docx rendering (Playwright → WeasyPrint fallback)
+│   ├── sync_check.py                  ← Document-consistency audit
+│   ├── templates/                     ← Resume + cover-letter layout (Jinja2 HTML/CSS — the only place layout is defined)
+│   ├── fonts/                         ← IBM Plex (SIL OFL)
+│   └── jobs/                          ← _schema.md (data-file spec) · _verifier_prompt.md · _quality_review_prompt.md (placeholder templates, rendered by build.py prompt)
 └── references/
     ├── context-doc-template.md        ← Tier 1 SSOT template — your master profile doc
     ├── sync-rules.md                  ← Three-tier document sync protocol + change log format

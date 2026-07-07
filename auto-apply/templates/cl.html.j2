@@ -1,0 +1,97 @@
+{#-
+  cl.html.j2 — Cover Letter 模板（Editorial Classic，视觉跟 resume.html.j2 一致）
+  ============================================================
+  输入：
+    contact:  {name: str, line: str}    # 跟 resume 同一个 contact，来自 master
+    cl:       {
+        date:              str,         # "May 27, 2026"
+        recipient_company: str,         # "CaRMS"
+        re_line:           str,         # "Design & Marketing Specialist"
+        salutation:        str,         # "Dear Hiring Team,"
+        body_paragraphs:   [str],       # 正文段落列表
+        closing:           str,         # "Sincerely,"
+        signature:         str,         # "Jane Doe"
+    }
+    fonts_css:  str  # 由 html_render.py 注入
+
+  视觉规则：
+    - 同 resume.html.j2 的字体 / 字号 / 头部样式（一致性）
+    - 1 页硬约束（CL 超页 → build.py 检测 FAIL 或 warn）
+    - 所有变量 |e 转义
+
+  版式来源（2026-07 重构）：
+    - 页头（name + contact 行）来自共享宏 templates/_header.html.j2，跟
+      resume.html.j2 强制同源。CL 的 contact 行比 resume 多一条分隔线，
+      这是有意差异，用宏的 divider=true 参数显式表达（见 _header.html.j2 注释）。
+    - 颜色/字体 token 来自共享文件 templates/_theme.css.j2。本文件 <style> 只保留
+      CL 专属的 body 字号行高 / @page margin / 正文段落排版规则，颜色一律引用
+      var(--...) token。
+    - 任何会话不得为单份 CL 改这个文件；调版式改 _theme.css.j2 / _header.html.j2。
+-#}
+{% from '_header.html.j2' import header %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ contact.name | e }} — Cover Letter</title>
+<style>
+{{ fonts_css }}
+{% include '_theme.css.j2' %}
+
+@page { size: letter; margin: 0.6in 0.7in; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  font-size: 10pt;
+  line-height: 1.4;
+  color: var(--color-ink);
+}
+/* 日期 / 公司 / Re */
+.date {
+  margin: 12pt 0 10pt 0;
+}
+.recipient {
+  font-weight: 700;
+  margin: 0 0 1pt 0;
+}
+.re-line {
+  font-style: italic;
+  color: var(--color-dim);
+  margin: 0 0 14pt 0;
+}
+.salutation {
+  margin: 0 0 10pt 0;
+}
+/* 正文段 */
+.body-para {
+  margin: 0 0 10pt 0;
+  text-align: left;
+}
+/* 落款 */
+.closing {
+  margin: 14pt 0 4pt 0;
+}
+.signature {
+  margin: 0;
+}
+</style>
+</head>
+<body>
+  {{ header(contact, divider=true) }}
+
+  <div class="date">{{ cl.date | e }}</div>
+  <div class="recipient">{{ cl.recipient_company | e }}</div>
+  <div class="re-line">Re: {{ cl.re_line | e }}</div>
+
+  <div class="salutation">{{ cl.salutation | e }}</div>
+
+  {%- for para in cl.body_paragraphs %}
+    {%- if para and para.strip() %}
+  <div class="body-para">{{ para | e }}</div>
+    {%- endif %}
+  {%- endfor %}
+
+  <div class="closing">{{ cl.closing | e }}</div>
+  <div class="signature">{{ cl.signature | e }}</div>
+</body>
+</html>
