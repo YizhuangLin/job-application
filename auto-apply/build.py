@@ -41,7 +41,7 @@ SCHEMA_VERSION = 2   # v2：母版 YAML 化，experience 列表结构
 
 # 引擎版本。发版流程：与发布仓 SKILL.md frontmatter version + CHANGELOG 同步 bump。
 # check-update 用它与上游最新版本对比。
-ENGINE_VERSION = "1.1.0"
+ENGINE_VERSION = "1.2.0"
 
 
 # ============================================================
