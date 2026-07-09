@@ -2929,13 +2929,16 @@ def engine_lint():
     2026-07-07 发布阶段扩展：jobs/_verifier_prompt.md / _quality_review_prompt.md 已改为
     占位符模板（事实红线迁入 workspace.yaml，由 build.py prompt 注入），因此纳入扫描 ——
     模板里再出现个人事实即回归。
+    2026-07-08 扩展：改扫 jobs/ 下全部 `_*.md` 引擎文档（含 _schema.md）——
+    v1.0.0 曾在 _schema.md 固定史实约束一节泄漏真实客户名/雇主名，而当时扫描范围
+    不含该文件，selftest 第 7 项静默放行。引擎文档与 prompt 模板同属发布内容，一并扫。
 
     返回 list[str]，每条 "相对路径:行号: 命中模式 | 行内容"。空列表 = 干净。
     """
     engine_dir = os.path.dirname(os.path.abspath(__file__))
     paths = sorted(glob.glob(os.path.join(engine_dir, "*.py"))) + \
             sorted(glob.glob(os.path.join(engine_dir, "templates", "*"))) + \
-            [os.path.join(engine_dir, "jobs", t) for t in sorted(_PROMPT_TEMPLATES.values())]
+            sorted(glob.glob(os.path.join(engine_dir, "jobs", "_*.md")))
     # templates 目录下可能含子目录（如 docx_skeleton/），用 glob 只取一层文件；
     # 子目录内文件另行遍历一层，覆盖 templates/*/*  但不递归更深。
     paths += sorted(glob.glob(os.path.join(engine_dir, "templates", "*", "*")))
@@ -3167,7 +3170,7 @@ def cmd_selftest(args):
                                  "; ".join(hits[:10]))
                 all_pass = False
             else:
-                _selftest_print(True, "引擎文件（*.py + templates/* + jobs/ prompt 模板）"
+                _selftest_print(True, "引擎文件（*.py + templates/* + jobs/_*.md）"
                                       f"无个人硬编码字符串（{len(lint_pats)} 个扫描模式）")
     except Exception as e:
         _selftest_print(False, "引擎 lint 扫描异常", f"{type(e).__name__}: {e}")
@@ -3238,6 +3241,8 @@ strategy_rules: []
 # 引擎 lint 扫描模式（selftest 第 7 项）：防止你的个人信息被硬编码进引擎代码/模板。
 # 母版 contact.name 里 ≥ 4 字母的 token 会自动派生，这里补充邮箱前缀、电话片段、
 # 用户名等其他标识（留空 + 母版姓名未填时，lint 跳过并提示）。
+# 姓名/邮箱不是唯一的泄漏面：雇主名、客户/项目名、标志性预算金额同样能定位到
+# 你本人——v1.0.0 发布曾因扫描列表缺这类模式漏检真实客户名。建议一并列入。
 lint_patterns: []
 """
 
