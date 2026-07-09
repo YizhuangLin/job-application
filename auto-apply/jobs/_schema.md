@@ -304,15 +304,16 @@ jd:
 
 ---
 
-## 四、固定史实约束（Target Social / Kin-king）
+## 四、固定史实约束（历史经历段）
 
-`experience` 列表里 `id` 为 `target_social` 和 `kinking` 的两段是历史事实段。
+`experience` 列表里的历史经历段（非当前职位的过往经历）是**历史事实段**。
 改写**只能调叙述角度/动词/侧重**（仅动各 bullet 的 `rewritten`），不能改动事实元素，
-`title` / `date` / `org_line` 一律不改：
+`title` / `date` / `org_line` 一律不改。典型的不可动事实元素（具体红线在你的 `workspace.yaml`
+`fact_redlines` 里定义，由 `build.py prompt` 注入核对 agent）：
 
-- 职级：Target Social 是 **Senior** Digital Marketing Manager（SSOT 第二节，不可降写）
-- 客户名：GAC Honda Odyssey（Target Social）、GAC Trumpchi + A2 milk powder（Kin-king）—— 注意 SSOT 明确标过 "GAC Toyota" 是错的，不可出现
-- 预算/数字：母版已是 CAD（11M+ CAD / 1.9M+ CAD），保持
+- **职级**：不可降写或升写（如 Senior 头衔不可写成普通头衔，反之亦然）
+- **客户名/项目名**：必须与 SSOT 一致；SSOT 标注过的历史错误名称（如曾写错过的客户名）绝不可再现
+- **预算/数字与货币**：保持 SSOT 记录的数值与货币单位（示例：候选人所在国货币应统一换算后使用）
 
 核对 agent 会逐条核对这些事实元素是否被改动。
 

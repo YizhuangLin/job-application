@@ -461,7 +461,7 @@ def cmd_prep(args):
         "#   1. resume.summary 不写年限数字，成果/角色导向开头\n"
         "#   2. 货币一律 CAD，金额不进 summary\n"
         "#   3. bilingual_line.keep: JD 要求/偏好中文→true；未提及→false\n"
-        "#   4. JD 薪资<$60K 或小雇主 → Target Social bullet 删 11M+ CAD 金额（保留超越 Sienna 叙事）\n"
+        "#   4. 低薪/小雇主岗位 → 按 workspace.yaml strategy_rules 对大额预算数字做取舍（保留成果叙事）\n"
         "#   rewritten 留空 = 沿用 master 原文。详见 jobs/_schema.md\n"
         "# ============================================================\n"
     )
