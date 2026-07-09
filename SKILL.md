@@ -1,6 +1,6 @@
 ---
 name: job-application
-version: 1.0.0
+version: 1.1.0
 description: "End-to-end job application workflow: candidate profile intake, resume red-flag detection, ATS-compliant optimisation, company research, targeted job search, per-JD resume and cover letter customisation, timed submission, active follow-up, and response-rate diagnostics. Use this skill whenever the user wants to search for jobs, prepare or update a resume, generate customised resumes or cover letters for specific postings, track applications, diagnose low response rates, or manage the full job hunting pipeline. Trigger on phrases like 'apply for jobs', 'find me jobs', 'customise my resume', 'job search', 'help me apply', 'update my resume for this role', 'track my applications', 'I'm not getting callbacks', 'why am I not hearing back', or any variant of job hunting or career workflow. In workspaces that contain the bundled auto-apply/ engine, resume generation and tracking run through deterministic build.py commands (Engine Mode)."
 ---
 
@@ -36,7 +36,7 @@ Load only the references relevant to the current phase. All references live unde
 
 ---
 
-## Engine Mode (v1.0) — deterministic pipeline
+## Engine Mode (v1.1) — deterministic pipeline
 
 The repo ships an optional execution engine at `auto-apply/` (Python, local-only). When the working workspace contains `auto-apply/build.py` **and** a `workspace.yaml` at its root, Phases 5–8 are executed through the engine instead of free-form document editing:
 
@@ -47,6 +47,7 @@ prep          capture the JD (raw text archived, mandatory) → per-application 
 (stage 2)     the session fills rewritten/cover_letter/provenance from the SSOT — never invent facts
 prompt        render the verifier / quality-review agent prompt (template + workspace.yaml redline injection)
 factcheck-pass · make · qualreview-pass · review    verify → render PDF → quality gate → pre-submit gate
+harvest       promote verified rewritten text from a factcheck-PASS'd APP###.yaml into rewrite_library.yaml (cross-role reuse; keyword-map discipline still applies to library pulls)
 submit / close / tracker / dashboard / fact / selftest
 check-update  compare local ENGINE_VERSION with upstream (the ONLY network-touching command, manual only)
 ```
@@ -59,6 +60,7 @@ Rules that override the prose phases while in Engine Mode:
 4. The user intervenes only for NEEDS-USER fact adjudication (report token; means "needs the candidate's own ruling") and apply/skip decisions.
 5. Each command prints its own next step; run `selftest` when stuck.
 6. If `status`/`selftest` prints the "30+ days since last update check" reminder (a pure local timestamp read — no implicit network), relay it to the user and ask whether to run `check-update`; never run it unprompted.
+7. **Mandatory rework loop**: if the quality-review agent's RATING is below Medium-High and the report lists any "could strengthen" keyword-map gap, stage 2 must be reworked (edit → re-verify → re-make → re-review) before `review`/submit — only accept the current draft outright when every miss is a genuine "honest gap" (no SSOT evidence to draw on).
 
 Per-user personalisation (page limit, SSOT filename, fact redlines, strategy rules) lives in `workspace.yaml` — the engine and its prompt templates contain no user-specific facts (enforced by `selftest` item 7, engine lint). Full contract: `auto-apply/SKILL.md`; data-file spec and three-stage workflow: `auto-apply/jobs/_schema.md`.
 

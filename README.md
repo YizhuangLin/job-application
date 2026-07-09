@@ -136,9 +136,10 @@ job-application/
 │   └── 06-engine-pipeline.md          ← Guards Engine Mode: use build.py commands, don't hand-edit generated tables
 ├── auto-apply/                        ← Execution engine (v1.0, optional — copy into your workspace)
 │   ├── SKILL.md                       ← Engine session contract (5 rules + command map)
-│   ├── build.py                       ← Pipeline CLI: init/status/prep/prompt/factcheck-pass/make/qualreview-pass/review/submit/close/tracker/dashboard/fact/selftest
+│   ├── build.py                       ← Pipeline CLI: init/status/prep/prompt/factcheck-pass/make/qualreview-pass/review/harvest/submit/close/tracker/dashboard/fact/selftest
 │   ├── html_render.py · docx_render.py ← Local PDF/docx rendering (Playwright → WeasyPrint fallback)
 │   ├── sync_check.py                  ← Document-consistency audit
+│   ├── evals/                         ← Canary-based verifier testing: inject_canaries.py + canaries.example.yaml
 │   ├── templates/                     ← Resume + cover-letter layout (Jinja2 HTML/CSS — the only place layout is defined)
 │   ├── fonts/                         ← IBM Plex (SIL OFL)
 │   └── jobs/                          ← _schema.md (data-file spec) · _verifier_prompt.md · _quality_review_prompt.md (placeholder templates, rendered by build.py prompt)

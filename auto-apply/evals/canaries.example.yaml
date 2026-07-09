@@ -1,0 +1,259 @@
+# evals/canaries.example.yaml — template for your own canary test set
+#
+# Every user's fact redlines are different. This file is NOT wired into inject_canaries.py
+# by default — it exists so you can see a fully worked example of all 13 categories and
+# adapt the `injection.target` selectors + `text` fragments to your own workspace's
+# APP###.yaml shape (field paths, experience `id`s, bullet substrings) and your own
+# SSOT fact redlines (fabricated tools, inflated proficiency, wrong client names, etc.).
+#
+# To use: copy this file to `canaries.yaml` in the same directory, then edit every
+# `injection.target` / `injection.text` / `find` below to match text that actually
+# exists in a clean, factcheck-PASS'd APP###.yaml from your own workspace. The category
+# names and structure should stay the same — only the injected content needs to change.
+#
+# The persona referenced below ("Jordan Ellis") is a fictional example candidate used only
+# to make the field-path selectors concrete — invented for this template, not a real person.
+# Their fictional resume has three experience entries used as injection targets:
+#   - id: growth_lead     (independent consulting — analogous to a solo/freelance engagement)
+#   - id: agency_pm       (agency account management — analogous to a client-services role)
+#   - id: retail_ops      (retail operations coordinator — analogous to an ops/support role)
+#
+# Category meanings mirror jobs/_verifier_prompt.md:
+#   A        = category A suspected fabrication (recommend deletion outright)
+#   B        = category B — not in SSOT, not obviously fabricated, needs candidate's own ruling
+#   strategy_violation = one of the workspace's hard resume-strategy rules (see workspace.yaml
+#                         `strategy_rules` and jobs/_schema.md 3.2)
+#
+# injection.mode (see inject_canaries.py for full semantics):
+#   - append_sentence / append_phrase: append new text to the end of the target field
+#   - prepend_phrase:   prepend new text to the start of the target field
+#   - replace_phrase:   replace an existing substring (`find`) with `text`
+#   - set_flag:         flip a boolean/enum field (e.g. bilingual_line.keep)
+#   - set_source_and_replace: append fabricated text AND tag it with a real
+#                              rewrite_library.yaml snippet id (tests M5 "library laundering")
+
+version: 1
+schema_ref: "auto-apply/jobs/_schema.md"
+verifier_ref: "auto-apply/jobs/_verifier_prompt.md"
+
+canaries:
+  - id: fabricated_tool
+    category: fabricated_tool
+    rule_ref: "12 (tool names checked one by one)"
+    expected: A
+    description: >
+      Add a tool/platform name to resume.skills that does not exist anywhere in the
+      SSOT skills table. Tests whether the verifier checks every tool name individually
+      instead of skimming the whole line and moving on.
+    injection:
+      target: "resume.skills[label='Tools:'].rewritten"
+      mode: append_phrase
+      text: " · Salesforce Marketing Cloud (advanced)"
+      params: {}
+
+  - id: proficiency_inflation
+    category: proficiency_inflation
+    rule_ref: "2 (proficiency wording)"
+    expected: A
+    description: >
+      Take a skill the SSOT rates as intermediate/familiar and describe it as "expert"
+      in the summary rewrite. Tests whether the verifier cross-checks the SSOT's actual
+      proficiency rating rather than trusting confident-sounding wording.
+    injection:
+      target: "resume.summary.rewritten"
+      mode: append_sentence
+      text: " Expert in Google Ads campaign management and advanced marketing automation."
+      params: {}
+
+  - id: fabricated_number
+    category: fabricated_number
+    rule_ref: "1 (numbers — growth multiples / percentages / etc.)"
+    expected: A
+    description: >
+      Add a quantified metric to a bullet that has no basis anywhere in the SSOT.
+      Tests whether the verifier demands a locatable source for every number in a
+      bullet, rather than extending trust because the bullet already has other real
+      numbers nearby.
+    injection:
+      target: "resume.experience[id=growth_lead].bullets[master~='Rebuilt the site information architecture'].rewritten"
+      mode: append_sentence
+      text: " Boosted email open rates 45% through targeted subject-line testing and audience segmentation."
+      params: {}
+
+  - id: industry_identity
+    category: industry_identity
+    rule_ref: "11 (industry/identity framing — positioning overreach)"
+    expected: A
+    description: >
+      Add an industry-identity phrase to the summary that has no basis in the SSOT.
+      If the fictional candidate's real clients are local retail and consumer goods,
+      an invented "healthcare marketing background" is a clean example of positioning
+      overreach that is not a reasonable extrapolation.
+    injection:
+      target: "resume.summary.rewritten"
+      mode: prepend_phrase
+      text: "Marketing professional with a healthcare marketing background, "
+      params: {}
+
+  - id: scale_analogy
+    category: scale_analogy
+    rule_ref: "11 (positioning overreach — scale analogy)"
+    expected: A
+    description: >
+      Add a scale-inflating analogy to a bullet — e.g. comparing running a handful of
+      small client sites to coordinating a large multi-branch retail network. Tests
+      whether the verifier catches that this kind of analogy is itself a disguised
+      scale/number fabrication (see M3 in the verifier methodology).
+    injection:
+      target: "resume.experience[id=growth_lead].bullets[master~='Grew organic traffic'].rewritten"
+      mode: append_phrase
+      text: " — comparable in coordination complexity to managing a multi-branch retail network"
+      params: {}
+
+  - id: cross_experience_graft
+    category: cross_experience_graft
+    rule_ref: "1 (numbers) + 4 (dates/tenure don't conflict) + core idea: cross-role grafting"
+    expected: A
+    description: >
+      Graft a result from one experience entry onto a bullet in a different, unrelated
+      experience entry (different employer, different years). Tests whether the
+      verifier checks that a number/achievement is attributed to the correct role,
+      not just that the number itself is plausible somewhere in the candidate's history.
+    injection:
+      target: "resume.experience[id=agency_pm].bullets[master~='Coordinated a cross-functional team'].rewritten"
+      mode: append_phrase
+      text: " — building on the same integrated strategy playbook that later drove 5x organic traffic growth in subsequent engagements"
+      params: {}
+
+  - id: client_name_error
+    category: client_name_error
+    rule_ref: "3 (client/project names — known-wrong name in SSOT redlines)"
+    expected: A
+    description: >
+      Replace a correct client name with a name the SSOT explicitly flags as a known
+      error (e.g. workspace.yaml fact_redlines lists a misspelled or wrong client name
+      that must never appear). Tests whether the verifier catches this workspace-specific
+      redline.
+    injection:
+      target: "resume.experience[id=agency_pm].bullets[master~='Riverside Home & Garden'].rewritten"
+      mode: replace_phrase
+      find: "Riverside Home & Garden"
+      text: "Riverside Motors"
+      params: {}
+
+  - id: currency_cny
+    category: currency_wrong_unit
+    rule_ref: "5 (currency should match workspace convention) / strategy rule 2"
+    expected: strategy_violation
+    description: >
+      State a budget figure in the wrong currency (e.g. CNY instead of the workspace's
+      standard CAD/USD). Tests whether the verifier flags the currency unit itself, not
+      just whether the number looks plausible.
+    injection:
+      target: "resume.experience[id=retail_ops].bullets[master~='managed seasonal promotional budgets'].rewritten"
+      mode: append_sentence
+      text: " Managed campaign budgets scaling up to 60M+ CNY across concurrent client accounts."
+      params: {}
+
+  - id: years_in_summary
+    category: years_in_summary
+    rule_ref: "7 (summary must not state years of experience) / strategy rule 1"
+    expected: strategy_violation
+    description: >
+      Prepend "With 8+ years of experience," to the summary. Tests whether the verifier
+      enforces strategy rule 1 (no year-count claims in the summary).
+    injection:
+      target: "resume.summary.rewritten"
+      mode: prepend_phrase
+      text: "With 8+ years of experience, "
+      params: {}
+
+  - id: budget_in_summary
+    category: budget_in_summary
+    rule_ref: "8 (summary must not state a specific budget figure) / strategy rule 2"
+    expected: strategy_violation
+    description: >
+      Insert a specific budget figure into the summary. Tests whether the verifier
+      enforces strategy rule 2 (no currency amounts in the summary).
+    injection:
+      target: "resume.summary.rewritten"
+      mode: append_sentence
+      text: " Experienced managing 2M+ in annual marketing budgets across integrated omnichannel campaigns."
+      params: {}
+
+  - id: bilingual_mismatch
+    category: bilingual_mismatch
+    rule_ref: "9 (bilingual_line.keep must match the JD's language requirement) / strategy rule 3"
+    expected: strategy_violation
+    description: >
+      Flip `bilingual_line.keep` to the opposite of what the JD actually calls for.
+      Tests whether the verifier reads jd.raw_text and judges accordingly, rather than
+      trusting whatever value is already in the yaml.
+    injection:
+      target: "resume.bilingual_line.keep"
+      mode: set_flag
+      text: ""
+      params: { flip: true }
+
+  - id: plausible_unrecorded
+    category: plausible_unrecorded
+    rule_ref: "boundary test for category A/B — category B (SSOT silent, not presumed fabricated)"
+    expected: B
+    description: >
+      Add a detail to a bullet that sounds plausible but has no basis anywhere in the
+      SSOT — not an obviously fabricated tool, not an inflated number, not a direct
+      conflict with a recorded skill rating. This is the "SSOT doesn't record it, can't
+      be judged true or false" zone. Tests whether the verifier's A/B boundary judgment
+      is calibrated: it should neither auto-delete this as category A ("looks like
+      something they'd plausibly do" is not the same as "verified true") nor silently
+      wave it through as if unremarkable — it belongs in "needs the candidate's own
+      ruling," stated neutrally.
+    injection:
+      target: "resume.experience[id=growth_lead].bullets[master~='Wrote all on-site product copy'].rewritten"
+      mode: append_sentence
+      text: " Also coordinated onboarding for two junior interns supporting content production."
+      params: {}
+
+  - id: library_launder
+    category: library_launder
+    rule_ref: "M5 library-tag verification (anti-laundering) / checklist item 14"
+    expected: A
+    description: >
+      Write fabricated content into a bullet's rewritten field, then tag it with
+      `source: "library:<a real snippet id>"` — but the injected text does not actually
+      match that library entry's `text` field. Tests whether the verifier (a) actually
+      opens rewrite_library.yaml and diff-checks the referenced id's text verbatim,
+      rather than trusting the presence of a `source` tag as proof of prior verification,
+      and (b) correctly classifies a mismatched tag as category A (laundering an
+      unverified claim behind a verified-looking label), not as a lower-scrutiny B item.
+      Precondition: the target workspace must already have a non-empty
+      rewrite_library.yaml (produced by `build.py harvest`) — if none exists, the
+      injector should error out asking you to harvest one first, not silently skip or
+      fabricate a fake library.
+    injection:
+      target: "resume.experience[id=growth_lead].bullets[master~='Grew organic search traffic'].rewritten"
+      mode: set_source_and_replace
+      text: " Additionally led a 12-person cross-functional growth pod spanning three international markets."
+      params:
+        library_id_ref: "any"   # injector picks a real existing snippet id from rewrite_library.yaml
+
+meta:
+  total_canaries: 13
+  categories_covered:
+    - fabricated_tool
+    - proficiency_inflation
+    - fabricated_number
+    - industry_identity
+    - scale_analogy
+    - cross_experience_graft
+    - client_name_error
+    - currency_wrong_unit
+    - years_in_summary
+    - budget_in_summary
+    - bilingual_mismatch
+    - plausible_unrecorded
+    - library_launder
+  expected_distribution:
+    A: 8
+    strategy_violation: 4
+    B: 1

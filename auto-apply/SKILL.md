@@ -1,7 +1,7 @@
 ---
 name: resume-pipeline
 description: JD 驱动的求职投递流水线：岗位筛选 → 定制简历生成（事实核对防造假）→ 投递登记 → 状态追踪与看板。任何会话冷启动跑 status 即可接手全部进度。
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Resume Pipeline — 会话契约
@@ -32,7 +32,9 @@ prompt       渲染核对/质检 agent 派发 prompt（模板占位符 + workspa
 factcheck-pass  锁定核对 PASS（--report 必传，报告+内容哈希入库，锁后改动会被 make/review 拦截）
 make         渲染简历+CL PDF（页数硬闸：超页只减内容，不缩排版）
 （质检）      派质量审核 agent（prompt --type qualreview 的输出）→ qualreview-pass 记 4 级评级
+             回炉铁律：RATING 低于 Medium-High 且有「可补强」项 → 必须按改法回炉一轮，才能进 review
 review       投递前总闸：factcheck/版式/qualreview/JD留档 四项全绿才可投
+harvest      把已 factcheck PASS 的 rewritten 沉淀入 rewrite_library.yaml（跨岗位复用素材，减少重复改写/核对）
 ─────────────────────────────────────────────────
 submit       登记投递（默认过 review 闸；--external 登记流水线外投递如内推）
 close        关闭（no-response/rejected/withdrawn/skipped/expired）

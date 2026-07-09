@@ -213,6 +213,48 @@ tracking: { ... }
 - **填了 = 用你写的文本替换。** 改写 = 把 SSOT 已有事实换一个贴合本 JD 的讲法/侧重，**不是**造 JD 想要但 SSOT 没有的事实。
 - JD 想要、但 SSOT 找不到支撑的内容 → **留空保留原文**，不要编。
 
+### 3.1b 片段库取用规则（`rewrite_library.yaml`）
+
+工作区根目录的 `rewrite_library.yaml`（路径见 `workspace.yaml` `paths.rewrite_library`）是历次
+`build.py harvest` 从已 factcheck PASS 的 APP###.yaml 里沉淀出的**已核对片段库**——summary /
+skills / bullet / cover letter 段落，按 `slot`（`summary` / `skills.<label-slug>` / `<exp_id>.bullet`
+/ `cl.paragraph`）分类，每条带 `angle`（侧重标签）和 `context`（出处 APP）。库文件不随引擎发布，
+由使用者自己的工作区通过 `harvest` 逐步积累；空工作区没有这个文件，`load_rewrite_library()` 会
+返回空骨架，不影响其余流程。
+
+**取用流程：**
+1. 阶段2 改写前，先按当前段的 `slot` + JD 侧重（对照 `angle`）查库，看有没有已核对过的片段可直接用或改动后用。
+2. **原样取用**（一字不改直接填进 `rewritten`）→ 在该字段追加 `source: "library:<id>"` 标注。
+3. **改动后取用**（哪怕只改一个词）→ 标 `source: "library:<id>+edited"`，或者干脆不标 `source`——
+   核对 agent 对这两种情况都按**全新文本**处理，不因为"来自库"而降低核对强度。
+4. cover letter 的复用记法不同：不在 `cover_letter.body_paragraphs` 本身加字段，而是在 `provenance`
+   里记一条 `{claim: "...", source: "library:<id>"}`。
+5. **库是素材来源，不是成品模板**——`jd.keyword_map` 纪律（3.2b）照常执行：库片段即使原样取用，
+   仍要判断它是否覆盖本次 JD 的高权重关键词，不覆盖照样要补写新内容，不能因为"库里有类似的"就跳过。
+
+**字段写法：**
+
+```yaml
+resume:
+  summary:
+    master: "..."
+    rewritten: "..."
+    source: "library:summary-7f74"          # 原样取用库条目 summary-7f74
+  skills:
+    - label: "..."
+      master: "..."
+      rewritten: "..."
+      source: "library:role.bullet-5fbc+edited"   # 取用后有改动
+  experience:
+    - id: role_a
+      bullets:
+        - master: "..."
+          rewritten: "..."
+          # 未标 source = 全新改写，或取用后改动未标注（核对按全新文本处理）
+```
+
+`assemble_content()` 等既有代码对多出的 `source` 字段无感（只读 `master`/`rewritten`），不影响 make。
+
 ### 3.2 简历策略规则（判据在 workspace.yaml `strategy_rules`）
 
 跨岗位统一的取舍口径**不写死在本文件**：规则原文维护在 SSOT 的「简历生成策略」
@@ -226,6 +268,28 @@ tracking: { ... }
    - `keep: false` → make **无条件**删 Summary 的双语句 + Languages 行（精确句存 `meta.bilingual_sentence`）。
    - `keep: true` → 默认保留；但若简历超页、且内容缩减 step 全部用尽仍超页，双语句是**末位缩减手段**（steplist 里 order=99）。宁可先删低价值内容，语言能力是 JD 匹配卖点，最后才牺牲。**任何情况下不用缩排版换页数。**
 2. **母版 vs 定制的分层。** 母版是内容全集。事实/风险层规则（如货币换算）母版本身已遵守；针对性减法规则（如按 JD 删语言句/删大额金额）母版保留、定制时按 JD 删。不要为执行减法规则去改母版。
+
+### 3.2b 关键词映射纪律（`jd.keyword_map`，field-tested —— HR 通过率与保真的连接点）
+
+阶段2 必做：从 `jd.raw_text` 提取 **5-8 个最高权重关键词**（同时出现在 requirements 和 responsibilities 的优先），逐个建立映射并写入 `jd.keyword_map`：
+
+```yaml
+jd:
+  keyword_map:                # 阶段2 Claude 填
+    - keyword: "technical SEO audits"        # JD 原词
+      ssot_evidence: "SSOT 技能表 SEO 行：Screaming Frog 审核 + Core Web Vitals"  # SSOT 证据点
+      placement: "role_a bullet 2 + Skills SEO 行"                                # 植入位置
+    - keyword: "HubSpot CMS"
+      ssot_evidence: "无 —— SSOT 仅有 HubSpot email/CRM 中级"
+      placement: "不植入（诚实缺口，CL 披露）"                                  # 无证据 = 显式标注不植入
+```
+
+三条规则：
+1. **JD 原词只在 SSOT 有实质证据时使用**——有据的关键词按 JD 精确措辞自然植入 Summary 或 bullet（不只堆 Skills 行）；无据的**显式标 "不植入"**，宁缺毋滥。
+2. 映射表是三方的对照面：核对 agent 验证每条 ssot_evidence 真实支撑该用法（防以"对齐"为名越界）；质检 agent 据此算命中率；漏掉高权重词且明明有据 = 质检"可补强"项。
+3. 落点纪律：每个有据关键词至少出现在 Summary 或一条 bullet（非仅 Skills 行）——ATS 和 HR 都更信上下文中的关键词。
+
+**回炉铁律**：质检 agent 报告若 RATING 低于 Medium-High 且存在 ≥1 个「可补强」项 → 必须按报告改法回炉阶段2 一轮（改后重核对 → 重 make → 重质检），之后才可进 review/投递；只有当全部未命中均为「诚实缺口」时才允许按低预期直接投。回炉以质检报告的改法清单为准，改写仍受核对门禁约束——提升命中率绝不以越界为代价。
 
 ### 3.3 `provenance` 怎么填
 

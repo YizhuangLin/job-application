@@ -41,7 +41,7 @@ SCHEMA_VERSION = 2   # v2：母版 YAML 化，experience 列表结构
 
 # 引擎版本。发版流程：与发布仓 SKILL.md frontmatter version + CHANGELOG 同步 bump。
 # check-update 用它与上游最新版本对比。
-ENGINE_VERSION = "1.0.0"
+ENGINE_VERSION = "1.1.0"
 
 
 # ============================================================
@@ -126,9 +126,13 @@ def load_workspace_config():
     文件不存在或字段缺失时用默认值 —— 引擎必须在裸工作区也能跑。
     fact_redlines / strategy_rules 是核对/质检 prompt 的工作区专属注入段
     （build.py prompt 渲染时替换 {{FACT_REDLINES}} / {{STRATEGY_RULES}} 占位符），
-    缺失时为空列表 —— 渲染层负责给出「未配置」的提示文案。"""
+    缺失时为空列表 —— 渲染层负责给出「未配置」的提示文案。
+
+    2026-07-08 新增 paths.rewrite_library：已核对片段库文件路径（相对仓库根），
+    默认值 "rewrite_library.yaml"（工作区根，与 master_resume.yaml 同级）。"""
     defaults = {"resume_layout": {"max_pages": 1, "overflow_strategy": "cut_content"},
-                "fact_redlines": [], "strategy_rules": [], "lint_patterns": []}
+                "fact_redlines": [], "strategy_rules": [], "lint_patterns": [],
+                "paths": {"rewrite_library": "rewrite_library.yaml"}}
     path = os.path.join(REPO_ROOT, "workspace.yaml")
     if not os.path.isfile(path):
         return defaults
@@ -137,10 +141,18 @@ def load_workspace_config():
     except Exception:
         return defaults
     rl = {**defaults["resume_layout"], **(cfg.get("resume_layout") or {})}
+    paths = {**defaults["paths"], **(cfg.get("paths") or {})}
     return {"resume_layout": rl,
             "fact_redlines": [str(s) for s in (cfg.get("fact_redlines") or [])],
             "strategy_rules": [str(s) for s in (cfg.get("strategy_rules") or [])],
-            "lint_patterns": [str(s) for s in (cfg.get("lint_patterns") or [])]}
+            "lint_patterns": [str(s) for s in (cfg.get("lint_patterns") or [])],
+            "paths": paths}
+
+
+def rewrite_library_path():
+    """已核对片段库文件的绝对路径，从 workspace.yaml paths.rewrite_library 派生。"""
+    rel = load_workspace_config()["paths"]["rewrite_library"]
+    return os.path.join(REPO_ROOT, rel)
 
 
 def pdf_pages(pdf_path):
@@ -1022,6 +1034,181 @@ def _read_report_result(report_path, pattern, label):
 # 核对报告首行的合法 token。NEEDS-USER 是现行 token（= 需候选人本人裁决）；
 # 旧模板产出的历史 token 同义接受，仅作向后兼容，模板/文档不再产出它。
 _FACTCHECK_RESULT_RE = r'RESULT:\s*(PASS|NEEDS-USER|NEEDS-LEON|FAIL)\s*$'  # engine-lint-allow: 旧 token 向后兼容
+
+
+# ============================================================
+# 子命令：harvest —— 已核对片段库（rewrite_library.yaml）
+# ============================================================
+# 2026-07-08 新增。已 factcheck PASS 的 APP###.yaml 里，rewritten 段已经过独立核对
+# agent 逐字核对过 —— 这些文本是"已验证素材"，值得沉淀成跨岗位可复用的片段库，
+# 减少每次阶段2 从零改写、也减少重复核对同样的事实点。
+#
+# 库文件本身只是"素材来源"，不是"成品模板"——阶段2 取用库片段仍需判断是否贴合
+# 当前 JD，改写后要不要保留 source 标注；keyword_map 纪律照常执行（见 jobs/_schema.md 3.1b）。
+
+def _slot_slug(label):
+    """skills label（如 "SEO & Marketing:"）→ slot 用的小写 slug（去冒号、空格转下划线）。"""
+    s = label.strip().rstrip(":").strip()
+    s = re.sub(r'[^A-Za-z0-9]+', '-', s).strip('-').lower()
+    return s
+
+
+def _snippet_id(slot, text):
+    """slot + 文本哈希前4位，如 "ore.bullet-b2a7"。同 slot 多条时避免 id 冲突。"""
+    h = hashlib.sha256(text.encode("utf-8")).hexdigest()[:4]
+    slot_part = re.sub(r'[^A-Za-z0-9.]+', '-', slot).strip('-')
+    return f"{slot_part}-{h}"
+
+
+def load_rewrite_library():
+    """读 rewrite_library.yaml。文件不存在 → 返回空骨架（{schema_version:1, snippets:[]}）。"""
+    path = rewrite_library_path()
+    if not os.path.isfile(path):
+        return {"schema_version": 1, "snippets": []}
+    data = yaml.safe_load(open(path, encoding="utf-8")) or {}
+    data.setdefault("schema_version", 1)
+    data.setdefault("snippets", [])
+    return data
+
+
+def save_rewrite_library(data):
+    path = rewrite_library_path()
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False, width=100)
+
+
+def _harvest_extract(data, tags):
+    """从一份已核对 PASS 的 APP###.yaml 提取可入库片段，返回 [{id, slot, master_ref,
+    angle, text, context, verified_at}, ...]（未去重，由调用方对照现有库去重）。"""
+    app_id = data.get("app_id", "")
+    company = data.get("company", "")
+    role = data.get("role", "")
+    context = f"{app_id} · {company} · {role}".strip(" ·")
+
+    rs = (data.get("review_status") or {}).get("factcheck") or {}
+    verified_at = (rs.get("passed_at") or "")[:10]  # ISO 时间戳取日期部分
+
+    r = data.get("resume") or {}
+    out = []
+
+    # summary
+    summary_rw = (r.get("summary", {}).get("rewritten") or "").strip()
+    if summary_rw:
+        out.append({
+            "id": _snippet_id("summary", summary_rw),
+            "slot": "summary",
+            "master_ref": (r["summary"].get("master") or "")[:60],
+            "angle": list(tags),
+            "text": summary_rw,
+            "context": context,
+            "verified_at": verified_at,
+        })
+
+    # skills
+    for s in r.get("skills") or []:
+        rw = (s.get("rewritten") or "").strip()
+        if not rw:
+            continue
+        slot = f"skills.{_slot_slug(s.get('label', ''))}"
+        out.append({
+            "id": _snippet_id(slot, rw),
+            "slot": slot,
+            "master_ref": (s.get("master") or "")[:60],
+            "angle": list(tags),
+            "text": rw,
+            "context": context,
+            "verified_at": verified_at,
+        })
+
+    # experience bullets
+    for e in r.get("experience") or []:
+        exp_id = e.get("id", "")
+        for b in e.get("bullets") or []:
+            rw = (b.get("rewritten") or "").strip()
+            if not rw:
+                continue
+            slot = f"{exp_id}.bullet"
+            out.append({
+                "id": _snippet_id(slot, rw),
+                "slot": slot,
+                "master_ref": (b.get("master") or "")[:60],
+                "angle": list(tags),
+                "text": rw,
+                "context": context,
+                "verified_at": verified_at,
+            })
+
+    # cover letter body paragraphs
+    for p in (data.get("cover_letter") or {}).get("body_paragraphs") or []:
+        p = (p or "").strip()
+        if not p:
+            continue
+        slot = "cl.paragraph"
+        out.append({
+            "id": _snippet_id(slot, p),
+            "slot": slot,
+            "master_ref": "",   # cover letter 没有 master 原文可对照，留空
+            "angle": list(tags),
+            "text": p,
+            "context": context,
+            "verified_at": verified_at,
+        })
+
+    return out
+
+
+def cmd_harvest(args):
+    """harvest --app APP-### [--tags a,b] [--allow-legacy]
+    从已 factcheck PASS 的 APP###.yaml 提取 rewritten 全文入库 rewrite_library.yaml。
+
+    前置：review_status.factcheck.result == "PASS"，且 content_hash 与当前内容一致；
+    hash 缺失（旧版锁定）默认拒绝，--allow-legacy 放行并打警告。"""
+    app_id = normalize_app_id(args.app)
+    yaml_path, data = _load_yaml(app_id)
+    _legacy_or_missing_resume_guard(app_id, data, "harvest")
+
+    fc_result = ((data.get("review_status") or {}).get("factcheck") or {}).get("result")
+    if fc_result != "PASS":
+        sys.exit(f"[BLOCKED] {app_id}.yaml review_status.factcheck.result != PASS（当前 {fc_result!r}）"
+                 f"\n  → harvest 只入库已核对通过的内容")
+
+    hash_status, hash_msg = factcheck_hash_check(data)
+    allow_legacy = getattr(args, "allow_legacy", False)
+    if hash_status == "mismatch":
+        sys.exit(f"[BLOCKED] factcheck content_hash 不一致 —— {hash_msg}"
+                 f"\n  → 内容在核对锁定后被改过，重新核对锁定后再 harvest")
+    if hash_status == "no_hash":
+        if not allow_legacy:
+            sys.exit(f"[BLOCKED] {app_id}.yaml 是旧版锁定（无 content_hash），harvest 默认拒绝。"
+                     f"\n  → 确认内容自锁定后未被改动 → 加 --allow-legacy 放行")
+        print(f"  ⚠ {hash_msg}（--allow-legacy 放行）")
+
+    tags_raw = (getattr(args, "tags", None) or "").strip()
+    tags = [t.strip() for t in tags_raw.split(",") if t.strip()] if tags_raw else []
+
+    candidates = _harvest_extract(data, tags)
+    if not candidates:
+        print(f"[OK] {app_id} 无可入库内容（所有 rewritten 均为空）")
+        return
+
+    lib = load_rewrite_library()
+    existing_by_slot = {}
+    for sn in lib["snippets"]:
+        existing_by_slot.setdefault(sn.get("slot"), set()).add(sn.get("text"))
+
+    n_added, n_skipped = 0, 0
+    for c in candidates:
+        seen = existing_by_slot.setdefault(c["slot"], set())
+        if c["text"] in seen:
+            n_skipped += 1
+            continue
+        lib["snippets"].append(c)
+        seen.add(c["text"])
+        n_added += 1
+
+    save_rewrite_library(lib)
+    print(f"[OK] harvest {app_id} 完成：入库 {n_added} 条 / 跳过重复 {n_skipped} 条")
+    print(f"  库文件：{rewrite_library_path()}（共 {len(lib['snippets'])} 条）")
 
 
 def cmd_factcheck_pass(args):
@@ -3360,6 +3547,12 @@ def main():
     rv = sub.add_parser("review", help="投递前总闸：核对/版式/质量")
     rv.add_argument("--app", required=True)
 
+    hv = sub.add_parser("harvest", help="从已 factcheck PASS 的 APP###.yaml 提取 rewritten 入库 rewrite_library.yaml")
+    hv.add_argument("--app", required=True)
+    hv.add_argument("--tags", help="逗号分隔的侧重标签，如 seo,sem（写入 snippet.angle）")
+    hv.add_argument("--allow-legacy", action="store_true",
+                    help="放行 content_hash 缺失的旧版 PASS 锁定（默认拒绝）")
+
     sub.add_parser("status", help="只读全景仪表盘：管道全景 + 今日行动 + 一致性自检 + 统计（不写文件）")
 
     db = sub.add_parser("dashboard", help="生成单文件只读投递看板 HTML（默认 REPO_ROOT/dashboard.html）")
@@ -3406,6 +3599,7 @@ def main():
      "qualreview-pass": cmd_qualreview_pass,
      "make": cmd_make,
      "review": cmd_review,
+     "harvest": cmd_harvest,
      "status": cmd_status,
      "dashboard": cmd_dashboard,
      "init": cmd_init,
