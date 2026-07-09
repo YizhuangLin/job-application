@@ -4,6 +4,13 @@ All notable changes to the `job-application` skill are documented here. Format f
 
 ---
 
+## 1.1.1 — 2026-07-09
+
+### Fixed
+- Closed the engine-lint scope gap that allowed the v1.0.0 schema-doc leak (prompt/schema docs now inside the lint scan).
+- Cleared residual release-gate findings: genericized a short-name lint example and a docstring budget figure; intentional public attribution (landing-page link, footer copyright) explicitly allow-marked.
+- Full personal-data re-audit before this release: 37-term private deny-list gate + generic email/phone/name pattern sweep — zero hits.
+
 ## 1.1.0 — 2026-07-08
 
 ### Added
