@@ -1,6 +1,6 @@
 # job-application — Claude Cowork Skill
 
-**[🌐 Landing Page](https://cestduleon.dev/job-application/)** — design philosophy, scenarios, and install walkthrough. Start here if you want the "why" before the "how."
+**[🌐 Landing Page](https://cestduleon.dev/job-application/)** — design philosophy, scenarios, and install walkthrough. Start here if you want the "why" before the "how." <!-- engine-lint-allow: 项目署名链接 -->
 
 A full-cycle job application skill for [Claude Cowork](https://claude.ai). Drop it into your `.claude/skills/` directory and Claude becomes an end-to-end job search partner: from building your candidate profile through interview prep and salary negotiation. This README is the technical reference — installation, file structure, hard rules, and extension points.
 

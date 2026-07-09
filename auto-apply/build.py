@@ -2904,7 +2904,7 @@ def engine_lint_patterns():
     内置列表本身就是维护者的个人信息）。来源两处，合并去重：
       1. workspace.yaml `lint_patterns`（显式列表：邮箱前缀、电话片段、用户名等）
       2. master_resume.yaml contact.name 派生：拆出 ≥ 4 个字母的 token，
-         按「原样 + 首字母大写」两种写法加入（≥4 是为了避开 Lin→inline 这类误伤）。
+         按「原样 + 首字母大写」两种写法加入（≥4 是为了避开 Kim→skimming 这类短名误伤）  # engine-lint-allow: 示例词。
     返回 list[str]；空列表 = 无可扫模式（裸工作区），由调用方决定怎么提示。"""
     pats = list(load_workspace_config()["lint_patterns"])
     try:

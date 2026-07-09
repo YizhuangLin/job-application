@@ -64,7 +64,7 @@ def _find_list_item(items, key, matcher, mode):
 
 
 def _split_path(target: str):
-    """按顶层 '.' 切分路径，但忽略 [...] 选择器内部的 '.'（例如 '1.9M+ CAD'）。"""
+    """按顶层 '.' 切分路径，但忽略 [...] 选择器内部的 '.'（例如 '2.7M+ CAD'）。"""
     parts = []
     buf = []
     depth = 0
