@@ -4,6 +4,19 @@ All notable changes to the `job-application` skill are documented here. Format f
 
 ---
 
+## 1.2.0 — 2026-07-09
+
+### Added
+- **Submission cards**: dashboard kanban cards and table APP cells now open a per-application detail card — selection reason, expectation line, match rating, factcheck status, JD keyword-hit table with SSOT evidence, collapsible full QA report, whitelisted JD source link, and deliverable `file://` links with copy-path buttons. `build.py review` regenerates the dashboard on all-green and auto-opens the card in the browser; on macOS it also reveals the resume PDF in Finder for drag-and-drop upload (`--no-open` skips both).
+- **Templated, multilingual dashboard**: presentation extracted from `build.py` into `templates/dashboard.html.j2` (Jinja2, autoescape) with all UI copy in `templates/dashboard_locale.yaml` (ships zh + en; append a language block to extend). Language selected via `workspace.yaml` `dashboard.language`, with block-level and per-key fallback to en. Still a single self-contained file with zero external requests.
+- **`release-sync` command**: one-command engine mirror from a private workspace into this public repo — allowlist copy (fail-closed), engine-lint gate, full-tree release-gate scan, auto-rollback on any hit, and a traceable auto-commit; pushing stays a manual action.
+- New stage-2 field `jd.selection_reason` records why a role was selected; shown on the submission card (older records fall back to `jd_summary`).
+
+### Changed
+- **Breaking**: `qualreview-pass` now requires `--report` (aligned with `factcheck-pass`); the QA report text is persisted in the yaml and feeds the submission card's strengths/gaps section.
+
+---
+
 ## 1.1.1 — 2026-07-09
 
 ### Fixed
