@@ -1,0 +1,122 @@
+# dashboard_locale.yaml — 投递看板 UI 语言包（2026-07-09 新增）
+# ============================================================
+# 语言选择：workspace.yaml 的 `dashboard.language`（会话按用户对话语言校准一次后写入）。
+# 回退链：请求语言 → en → 文件里第一个语言块；缺失的 key 逐个回退到 en。
+# 新语言支持：Claude 会话在本文件追加一个语言块即可（校准一次，之后固化本地）。
+# 占位符：{n} 由渲染层替换。此文件属引擎资产，受 engine_lint 扫描——禁止含任何用户个人信息。
+
+zh:
+  title: 投递看板
+  subtitle_readonly: 只读视图，从 auto-apply/jobs/*.yaml 派生 —— 不提供任何写入功能（登记投递 / 关闭请用 build.py submit / close）
+  subtitle_generated: 生成时间
+  subtitle_regen: 重新生成
+  stat_applied_total: 已投总数
+  stat_interview_rejected: 面试 / 拒信数
+  stat_ready_backlog: Ready 待投
+  stat_active: 在途 Active
+  stat_alerts: 告警数
+  sec_actions: 今日行动 / 告警
+  sec_kanban: 看板
+  sec_table: 全量表格（点列头排序）
+  sec_trend: 月度趋势（投递 · 拒信）
+  alert_none: 今日无待办 ✓
+  expand_n: 展开 {n} 条
+  th_app: APP
+  th_company: 公司
+  th_role: 职位
+  th_stage: 阶段
+  th_outcome: 结果
+  th_applied: 投递日期
+  th_days: 天数
+  th_follow_up: 跟进截止
+  th_match: Match
+  th_resume_file: 简历文件
+  th_notes: 备注
+  th_closed_reason: 关闭原因
+  th_closed_date: 关闭日期
+  trend_applied: 投递
+  trend_rejected: 拒信
+  trend_none: 暂无按月数据
+  footer_note: 数据仅供参考，回应数等字段识别规则较粗糙，详见 build.py status 输出的字段说明。
+  card_hint: 点击查看投递卡
+  days_suffix: " 天"
+  d_close: 关闭 ✕
+  d_match_label: Match
+  d_factcheck_pass: Factcheck PASS
+  d_factcheck_prefix: Factcheck
+  d_factcheck_missing: 未留档
+  d_expectation: 期待管理（质检一句话）
+  d_selection_reason: 入选理由
+  d_selection_reason_fallback: 入选理由（回退显示 JD 摘要 —— 旧 APP 无 selection_reason 字段）
+  d_jd_source: JD 来源
+  d_strengths: 优势 —— JD keyword 命中（{n} 条，含 SSOT 证据与落点）
+  d_kw_keyword: Keyword
+  d_kw_evidence: SSOT 证据
+  d_kw_placement: 简历落点
+  d_gaps: 缺口与质检报告
+  d_report_expand: 展开质检报告全文（含未命中/可补强/诚实缺口清单）
+  d_report_missing: 质检报告未留档（历史 APP 未强制 --report）—— 仅有上方期待管理一句话
+  d_files: 文件（浏览器预览 · 复制路径可到 Finder 打开）
+  d_files_hint: review 全绿时 Finder 已自动选中成品文件，可直接拖拽上传
+  d_notes: 备注 / 投递渠道
+  copy: 复制
+  copied: 已复制 ✓
+  copy_manual: 手动复制：
+
+en:
+  title: Application Dashboard
+  subtitle_readonly: Read-only view derived from auto-apply/jobs/*.yaml — no write actions here (use build.py submit / close to record changes)
+  subtitle_generated: Generated
+  subtitle_regen: Regenerate
+  stat_applied_total: Total Applied
+  stat_interview_rejected: Interviews / Rejections
+  stat_ready_backlog: Ready to Apply
+  stat_active: Active
+  stat_alerts: Alerts
+  sec_actions: Today's Actions / Alerts
+  sec_kanban: Board
+  sec_table: All Applications (click headers to sort)
+  sec_trend: Monthly Trend (applied · rejected)
+  alert_none: Nothing due today ✓
+  expand_n: Show {n} items
+  th_app: APP
+  th_company: Company
+  th_role: Role
+  th_stage: Stage
+  th_outcome: Outcome
+  th_applied: Applied
+  th_days: Days
+  th_follow_up: Follow-up
+  th_match: Match
+  th_resume_file: Resume File
+  th_notes: Notes
+  th_closed_reason: Closed Reason
+  th_closed_date: Closed Date
+  trend_applied: applied
+  trend_rejected: rejected
+  trend_none: No monthly data yet
+  footer_note: Figures are indicative — some fields (e.g. response counts) use rough heuristics; see build.py status for details.
+  card_hint: Click to open application card
+  days_suffix: " d"
+  d_close: Close ✕
+  d_match_label: Match
+  d_factcheck_pass: Factcheck PASS
+  d_factcheck_prefix: Factcheck
+  d_factcheck_missing: not on file
+  d_expectation: Expectation (one-line QA verdict)
+  d_selection_reason: Why this role was selected
+  d_selection_reason_fallback: Why this role was selected (showing JD summary — older records have no selection_reason field)
+  d_jd_source: JD Source
+  d_strengths: Strengths — JD keyword hits ({n}, with SSOT evidence and placement)
+  d_kw_keyword: Keyword
+  d_kw_evidence: SSOT Evidence
+  d_kw_placement: Resume Placement
+  d_gaps: Gaps & QA Report
+  d_report_expand: Expand full QA report (misses / improvable / honest gaps)
+  d_report_missing: QA report not on file (older records predate mandatory --report) — only the one-line expectation above is available
+  d_files: Files (preview in browser · copy path to open in Finder)
+  d_files_hint: When review passes all-green, Finder auto-selects the deliverables for drag-and-drop upload
+  d_notes: Notes / Application Channel
+  copy: Copy
+  copied: Copied ✓
+  copy_manual: "Copy manually:"

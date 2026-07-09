@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{ L.title }} · {{ owner_label }}</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fafafa;
+    --surface: #ffffff;
+    --surface-2: #f4f4f5;
+    --border: #e4e4e7;
+    --text: #18181b;
+    --text-2: #70707b;
+    --accent: #2563eb;
+    --accent-bg: rgba(37, 99, 235, .10);
+    --ok-fg: #15803d;
+    --ok-bg: rgba(34, 197, 94, .12);
+    --warn-fg: #b45309;
+    --warn-bg: rgba(245, 158, 11, .14);
+    --err-fg: #b91c1c;
+    --err-bg: rgba(239, 68, 68, .10);
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101014;
+      --surface: #18181c;
+      --surface-2: #222228;
+      --border: #2c2c34;
+      --text: #e7e7ea;
+      --text-2: #9c9ca6;
+      --accent: #7aa2ff;
+      --accent-bg: rgba(122, 162, 255, .14);
+      --ok-fg: #4ade80;
+      --ok-bg: rgba(74, 222, 128, .12);
+      --warn-fg: #fbbf24;
+      --warn-bg: rgba(251, 191, 36, .12);
+      --err-fg: #f87171;
+      --err-bg: rgba(248, 113, 113, .12);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+                 Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 28px 24px 48px; }
+  a { color: var(--accent); }
+  code {
+    font-family: var(--mono);
+    font-size: .9em;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 5px;
+  }
+  .muted { color: var(--text-2); }
+
+  /* header */
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; margin: 0 0 6px; }
+  h1 .owner { color: var(--text-2); font-weight: 500; }
+  .subtitle { margin: 0; color: var(--text-2); font-size: 12.5px; line-height: 1.7; }
+
+  /* stat cards */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin: 20px 0 32px;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    min-width: 0;
+  }
+  .stat .num {
+    font-size: 22px;
+    font-weight: 650;
+    letter-spacing: -.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .num-alert { color: var(--err-fg); }
+  .stat .lbl { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+
+  /* sections */
+  section { margin-bottom: 32px; }
+  section > h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+  }
+
+  /* alerts */
+  .alert {
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+  .alert-red { background: var(--err-bg); color: var(--err-fg); }
+  .alert-amber { background: var(--warn-bg); color: var(--warn-fg); }
+  .alert-ok { background: var(--ok-bg); color: var(--ok-fg); }
+
+  /* kanban */
+  .kanban { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 900px) { .kanban { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .kanban { grid-template-columns: 1fr; } }
+  .kcol { background: var(--surface-2); border-radius: var(--radius); padding: 8px; min-width: 0; }
+  .kcol-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 4px 6px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .kcol-count { font-weight: 500; font-variant-numeric: tabular-nums; }
+  .kcol-body { max-height: 620px; overflow-y: auto; border-radius: 8px; }
+  .kcard {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    min-width: 0;
+    transition: border-color .15s;
+  }
+  .kcard:last-child { margin-bottom: 0; }
+  .kcard:hover, .kcard:focus-visible { border-color: var(--accent); outline: none; }
+  .kcard-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .kcard-id { font-family: var(--mono); font-size: 11px; color: var(--text-2); }
+  .badge-match {
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 1px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .kcard-company { font-weight: 600; font-size: 13px; margin-top: 3px; overflow-wrap: anywhere; }
+  .kcard-role { font-size: 12px; color: var(--text-2); line-height: 1.4; overflow-wrap: anywhere; }
+  .kcard-meta { font-size: 11px; color: var(--text-2); margin-top: 5px; }
+  .kcol-fold {
+    width: 100%;
+    padding: 7px;
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    color: var(--text-2);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color .15s, color .15s;
+  }
+  .kcol-fold:hover { color: var(--text); border-color: var(--text-2); }
+
+  /* table */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: auto;
+    max-height: min(560px, 72vh);
+  }
+  table.apps { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12.5px; }
+  table.apps thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface);
+    box-shadow: inset 0 -1px 0 var(--border);
+    text-align: left;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-2);
+    padding: 8px 10px;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+  }
+  table.apps thead th .sort-ind {
+    display: inline-block;
+    width: 1.1em;
+    color: var(--accent);
+    font-weight: 400;
+  }
+  table.apps tbody td {
+    border-top: 1px solid var(--border);
+    padding: 7px 10px;
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  table.apps tbody tr:first-child td { border-top: none; }
+  table.apps tbody tr:hover td { background: var(--surface-2); }
+  tr.row-closed td { color: var(--text-2); }
+  td.applink {
+    color: var(--accent);
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  td.clip { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+
+  /* trend */
+  .trend { display: flex; flex-direction: column; gap: 10px; max-width: 680px; }
+  .trend-row { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; }
+  .trend-month { font-family: var(--mono); font-size: 12px; color: var(--text-2); }
+  .trend-bars { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .trend-line { display: flex; align-items: center; gap: 8px; }
+  .trend-bar { height: 8px; border-radius: 4px; flex: none; }
+  .trend-bar.b-applied { background: var(--accent); }
+  .trend-bar.b-rejected { background: var(--err-fg); }
+  .trend-n { font-size: 11px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .legend { display: inline-flex; gap: 14px; font-size: 12px; font-weight: 400; color: var(--text-2); }
+  .legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+  .legend .dot-applied { background: var(--accent); }
+  .legend .dot-rejected { background: var(--err-fg); }
+
+  footer {
+    color: var(--text-2);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+    margin-top: 8px;
+  }
+
+  /* detail modal */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(12, 12, 16, .45);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 48px 20px;
+    overflow-y: auto;
+    z-index: 40;
+  }
+  .overlay[hidden] { display: none; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: min(840px, 100%);
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    padding: 20px 24px 24px;
+  }
+  .m-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .m-titles { min-width: 0; }
+  .m-eyebrow { font-family: var(--mono); font-size: 11.5px; color: var(--text-2); letter-spacing: .02em; }
+  .m-company { margin: 2px 0 0; font-size: 17px; font-weight: 650; overflow-wrap: anywhere; }
+  .m-role { font-size: 13px; color: var(--text-2); margin-top: 2px; overflow-wrap: anywhere; }
+  .m-close {
+    flex: none;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-2);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color .15s, color .15s;
+  }
+  .m-close:hover { color: var(--text); border-color: var(--text-2); }
+  .m-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .pill-neutral { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+  .pill-accent { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+  .pill-ok { background: var(--ok-bg); color: var(--ok-fg); font-weight: 600; }
+  .pill-warn { background: var(--warn-bg); color: var(--warn-fg); font-weight: 600; }
+  .m-block { margin-top: 18px; }
+  .m-block > h4 {
+    margin: 0 0 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--text-2);
+  }
+  .m-block p { margin: 0; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .m-callout {
+    background: var(--surface-2);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 10px 12px;
+  }
+  .m-jd { display: flex; align-items: baseline; gap: 8px; }
+  .m-jd a, .m-jd span { min-width: 0; word-break: break-all; }
+  .kw-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
+  .kw-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-2);
+    padding: 0 8px 6px 0;
+  }
+  .kw-table td {
+    border-top: 1px solid var(--border);
+    padding: 7px 8px 7px 0;
+    vertical-align: top;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .kw-table th:nth-child(1), .kw-table td:nth-child(1) { width: 30%; }
+  .kw-table th:nth-child(2), .kw-table td:nth-child(2) { width: 40%; }
+  .kw-table th:nth-child(3), .kw-table td:nth-child(3) { width: 30%; }
+  .m-report summary { cursor: pointer; color: var(--accent); font-size: 13px; user-select: none; }
+  .m-report pre {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .file-list { list-style: none; margin: 0; padding: 0; }
+  .file-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 0;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .file-list li:first-child { border-top: none; }
+  .file-list a { min-width: 0; overflow-wrap: anywhere; text-decoration: none; }
+  .file-list a:hover { text-decoration: underline; }
+  .hint { font-size: 12px; margin-top: 8px; }
+  .copy-btn {
+    flex: none;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-2);
+    border-radius: 6px;
+    font-size: 11px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: border-color .15s, color .15s;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--text-2); }
+  .copy-btn.done { color: var(--ok-fg); border-color: var(--ok-fg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>{{ L.title }}<span class="owner"> · {{ owner_label }}</span></h1>
+    <p class="subtitle">{{ L.subtitle_readonly }}</p>
+    <p class="subtitle">{{ L.subtitle_generated }} {{ generated_at }} · {{ L.subtitle_regen }} <code>python3 auto-apply/build.py dashboard</code></p>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="num">{{ stats.applied_total }}</div><div class="lbl">{{ L.stat_applied_total }}</div></div>
+    <div class="stat"><div class="num">{{ stats.interview_count }} / {{ stats.rejected_count }}</div><div class="lbl">{{ L.stat_interview_rejected }}</div></div>
+    <div class="stat"><div class="num">{{ stats.ready_backlog }}</div><div class="lbl">{{ L.stat_ready_backlog }}</div></div>
+    <div class="stat"><div class="num">{{ stats.n_active }}</div><div class="lbl">{{ L.stat_active }}</div></div>
+    <div class="stat"><div class="num{% if stats.n_alerts %} num-alert{% endif %}">{{ stats.n_alerts }}</div><div class="lbl">{{ L.stat_alerts }}</div></div>
+  </div>
+
+  <section id="sec-actions">
+    <h2>{{ L.sec_actions }}</h2>
+    {% if alerts %}
+    {% for a in alerts %}
+    <div class="alert {{ 'alert-red' if a.strip().startswith('⚠') else 'alert-amber' }}">{{ a }}</div>
+    {% endfor %}
+    {% else %}
+    <div class="alert alert-ok">{{ L.alert_none }}</div>
+    {% endif %}
+  </section>
+
+  <section id="sec-kanban">
+    <h2>{{ L.sec_kanban }}</h2>
+    <div class="kanban">
+      {% for col_name, col_apps in kanban.items() %}
+      <div class="kcol">
+        <div class="kcol-head"><span>{{ col_name }}</span><span class="kcol-count">{{ col_apps|length }}</span></div>
+        {% set folded = col_name == 'Closed' and col_apps %}
+        {% if folded %}
+        <button type="button" class="kcol-fold" data-fold="kbody-{{ col_name }}">{{ L.expand_n|replace('{n}', col_apps|length|string) }}</button>
+        {% endif %}
+        <div class="kcol-body" id="kbody-{{ col_name }}"{% if folded %} hidden{% endif %}>
+          {% for a in col_apps %}
+          <div class="kcard" id="card-{{ a.app_id }}" data-app="{{ a.app_id }}" title="{{ L.card_hint }}" tabindex="0">
+            <div class="kcard-top">
+              <span class="kcard-id">{{ a.app_id }}</span>
+              {% if a.match and a.match != '—' %}<span class="badge-match">{{ a.match }}</span>{% endif %}
+            </div>
+            <div class="kcard-company">{{ a.company }}</div>
+            <div class="kcard-role">{{ a.role }}</div>
+            <div class="kcard-meta">{{ a.outcome or '—' }} · {% if a.days_in_state is not none %}{{ a.days_in_state }}{{ L.days_suffix }}{% else %}—{% endif %}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section id="sec-table">
+    <h2>{{ L.sec_table }}</h2>
+    <div class="table-wrap">
+      <table class="apps" id="app-table">
+        <thead>
+          <tr>
+            {% set headers = [L.th_app, L.th_company, L.th_role, L.th_stage, L.th_outcome, L.th_applied, L.th_days, L.th_follow_up, L.th_match, L.th_resume_file, L.th_notes, L.th_closed_reason, L.th_closed_date] %}
+            {% for h in headers %}<th>{{ h }}<span class="sort-ind" aria-hidden="true"></span></th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in apps %}
+          <tr{% if a.stage == 'Closed' %} class="row-closed"{% endif %}>
+            <td class="applink" data-app="{{ a.app_id }}" title="{{ L.card_hint }}" tabindex="0">{{ a.app_id }}</td>
+            <td>{{ a.company or '—' }}</td>
+            <td class="clip" title="{{ a.role or '' }}">{{ a.role or '—' }}</td>
+            <td>{{ a.stage or '—' }}</td>
+            <td>{{ a.outcome or '—' }}</td>
+            <td>{{ a.applied or '—' }}</td>
+            <td>{% if a.days_in_state is not none %}{{ a.days_in_state }}{% else %}—{% endif %}</td>
+            <td>{{ a.follow_up_by or '—' }}</td>
+            <td>{{ a.match or '—' }}</td>
+            <td class="clip" title="{{ a.resume_file or '' }}">{{ a.resume_file or '—' }}</td>
+            <td class="clip" title="{{ a.notes or '' }}">{{ a.notes or '—' }}</td>
+            <td class="clip" title="{{ a.closed_reason or '' }}">{{ a.closed_reason or '—' }}</td>
+            <td>{{ a.closed_date or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="sec-trend">
+    <h2>{{ L.sec_trend }}
+      <span class="legend">
+        <span><span class="dot dot-applied"></span>{{ L.trend_applied }}</span>
+        <span><span class="dot dot-rejected"></span>{{ L.trend_rejected }}</span>
+      </span>
+    </h2>
+    {% if trend %}
+    <div class="trend">
+      {% for t in trend %}
+      <div class="trend-row">
+        <div class="trend-month">{{ t.month }}</div>
+        <div class="trend-bars">
+          <div class="trend-line">
+            <div class="trend-bar b-applied" style="width: {{ (t.applied / max_month_count * 100)|round(1) }}%"></div>
+            <span class="trend-n">{{ t.applied }}</span>
+          </div>
+          <div class="trend-line">
+            <div class="trend-bar b-rejected" style="width: {{ (t.rejected / max_month_count * 100)|round(1) }}%"></div>
+            <span class="trend-n">{{ t.rejected }}</span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">{{ L.trend_none }}</p>
+    {% endif %}
+  </section>
+
+  <footer>{{ L.footer_note }}</footer>
+
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+</div>
+
+<script>var L = {{ l_json|safe }};</script>
+<script id="dashboard-data" type="application/json">{{ data_json|safe }}</script>
+<script>
+(function () {
+  'use strict';
+
+  var DATA = JSON.parse(document.getElementById('dashboard-data').textContent);
+  var APPS = {};
+  (DATA.apps || []).forEach(function (a) { APPS[a.app_id] = a; });
+
+  var overlay = document.getElementById('overlay');
+  var panel = document.getElementById('modal');
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function block(title) {
+    var b = el('section', 'm-block');
+    b.appendChild(el('h4', null, title));
+    return b;
+  }
+
+  function copyBtn(text) {
+    var btn = el('button', 'copy-btn', L.copy);
+    btn.type = 'button';
+    btn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var ok = function () {
+        btn.textContent = L.copied;
+        btn.classList.add('done');
+        setTimeout(function () {
+          btn.textContent = L.copy;
+          btn.classList.remove('done');
+        }, 1400);
+      };
+      var fallback = function () { window.prompt(L.copy_manual, text); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(ok, fallback);
+      } else {
+        fallback();
+      }
+    });
+    return btn;
+  }
+
+  function fileUrl(p) {
+    return 'file://' + encodeURI(p).replace(/#/g, '%23').replace(/\?/g, '%3F');
+  }
+
+  function closeDetail() {
+    overlay.hidden = true;
+    if (location.hash) {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    }
+  }
+
+  function showDetail(appId) {
+    var a = APPS[appId];
+    if (!a) return;
+    panel.textContent = '';
+
+    var head = el('header', 'm-head');
+    var titles = el('div', 'm-titles');
+    titles.appendChild(el('div', 'm-eyebrow', a.app_id));
+    titles.appendChild(el('h3', 'm-company', a.company || ''));
+    titles.appendChild(el('div', 'm-role', a.role || ''));
+    head.appendChild(titles);
+    var x = el('button', 'm-close', L.d_close);
+    x.type = 'button';
+    x.addEventListener('click', closeDetail);
+    head.appendChild(x);
+    panel.appendChild(head);
+
+    var badges = el('div', 'm-badges');
+    var stageTxt = (a.stage || '') + (a.outcome && a.outcome !== '—' ? ' · ' + a.outcome : '');
+    badges.appendChild(el('span', 'pill pill-neutral', stageTxt));
+    var rating = a.qual_rating || a.match;
+    if (rating && rating !== '—') {
+      badges.appendChild(el('span', 'pill pill-accent', L.d_match_label + ': ' + rating));
+    }
+    if (a.factcheck_result === 'PASS') {
+      badges.appendChild(el('span', 'pill pill-ok', L.d_factcheck_pass));
+    } else {
+      badges.appendChild(el('span', 'pill pill-warn', L.d_factcheck_prefix + ' ' + (a.factcheck_result || L.d_factcheck_missing)));
+    }
+    panel.appendChild(badges);
+
+    if (a.qual_expectation) {
+      var bExp = block(L.d_expectation);
+      bExp.appendChild(el('p', 'm-callout', a.qual_expectation));
+      panel.appendChild(bExp);
+    }
+
+    var reason = a.selection_reason || a.jd_summary;
+    if (reason) {
+      var bR = block(a.selection_reason ? L.d_selection_reason : L.d_selection_reason_fallback);
+      bR.appendChild(el('p', null, reason));
+      panel.appendChild(bR);
+    }
+
+    if (a.jd_url) {
+      var bJd = block(L.d_jd_source);
+      var row = el('p', 'm-jd');
+      if (/^(https?:|mailto:)/i.test(a.jd_url)) {
+        var jdLink = el('a', null, a.jd_url);
+        jdLink.href = a.jd_url;
+        jdLink.target = '_blank';
+        jdLink.rel = 'noopener noreferrer';
+        row.appendChild(jdLink);
+      } else {
+        row.appendChild(el('span', null, a.jd_url));
+      }
+      row.appendChild(copyBtn(a.jd_url));
+      bJd.appendChild(row);
+      panel.appendChild(bJd);
+    }
+
+    if (a.keyword_map && a.keyword_map.length) {
+      var bKw = block(L.d_strengths.replace('{n}', String(a.keyword_map.length)));
+      var tbl = el('table', 'kw-table');
+      var thead = el('thead');
+      var htr = el('tr');
+      [L.d_kw_keyword, L.d_kw_evidence, L.d_kw_placement].forEach(function (h) {
+        htr.appendChild(el('th', null, h));
+      });
+      thead.appendChild(htr);
+      tbl.appendChild(thead);
+      var tbody = el('tbody');
+      a.keyword_map.forEach(function (k) {
+        var tr = el('tr');
+        tr.appendChild(el('td', null, k.keyword || ''));
+        tr.appendChild(el('td', null, k.ssot_evidence || ''));
+        tr.appendChild(el('td', null, k.placement || ''));
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      bKw.appendChild(tbl);
+      panel.appendChild(bKw);
+    }
+
+    var bRep = block(L.d_gaps);
+    if (a.qual_report) {
+      var det = el('details', 'm-report');
+      det.appendChild(el('summary', null, L.d_report_expand));
+      det.appendChild(el('pre', null, a.qual_report));
+      bRep.appendChild(det);
+    } else {
+      bRep.appendChild(el('p', 'muted', L.d_report_missing));
+    }
+    panel.appendChild(bRep);
+
+    if (a.files && a.files.length) {
+      var bF = block(L.d_files);
+      var ul = el('ul', 'file-list');
+      a.files.forEach(function (f) {
+        var li = el('li');
+        var fLink = el('a', null, f.label);
+        fLink.href = fileUrl(f.path);
+        fLink.target = '_blank';
+        fLink.rel = 'noopener noreferrer';
+        li.appendChild(fLink);
+        li.appendChild(copyBtn(f.path));
+        ul.appendChild(li);
+      });
+      bF.appendChild(ul);
+      bF.appendChild(el('p', 'muted hint', L.d_files_hint));
+      panel.appendChild(bF);
+    }
+
+    if (a.notes && a.notes !== '—') {
+      var bN = block(L.d_notes);
+      bN.appendChild(el('p', null, a.notes));
+      panel.appendChild(bN);
+    }
+
+    overlay.hidden = false;
+    panel.scrollTop = 0;
+    try { history.replaceState(null, '', '#' + a.app_id); } catch (e) {}
+  }
+
+  overlay.addEventListener('click', function (ev) {
+    if (ev.target === overlay) closeDetail();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && !overlay.hidden) closeDetail();
+  });
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target && ev.target.closest ? ev.target.closest('[data-app]') : null;
+    if (t) showDetail(t.getAttribute('data-app'));
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter') return;
+    var t = ev.target && ev.target.closest ? ev.target.closest('[data-app]') : null;
+    if (t) showDetail(t.getAttribute('data-app'));
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-fold]'), function (btn) {
+    btn.addEventListener('click', function () {
+      var body = document.getElementById(btn.getAttribute('data-fold'));
+      if (body) body.hidden = false;
+      btn.hidden = true;
+    });
+  });
+
+  var table = document.getElementById('app-table');
+  var ths = Array.prototype.slice.call(table.tHead.rows[0].cells);
+  var sortCol = -1;
+  var sortAsc = true;
+  var numRe = /^-?\d+(\.\d+)?$/;
+  function sortBy(i) {
+    sortAsc = (sortCol === i) ? !sortAsc : true;
+    sortCol = i;
+    var tbody = table.tBodies[0];
+    var rows = Array.prototype.slice.call(tbody.rows);
+    var langCode = document.documentElement.lang || undefined;
+    rows.sort(function (ra, rb) {
+      var av = ra.cells[i].textContent.trim();
+      var bv = rb.cells[i].textContent.trim();
+      var an = numRe.test(av);
+      var bn = numRe.test(bv);
+      var cmp;
+      if (an && bn) cmp = parseFloat(av) - parseFloat(bv);
+      else if (an) cmp = -1;
+      else if (bn) cmp = 1;
+      else cmp = av.localeCompare(bv, langCode);
+      return sortAsc ? cmp : -cmp;
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+    ths.forEach(function (th, idx) {
+      var ind = th.querySelector('.sort-ind');
+      if (ind) ind.textContent = (idx === i) ? (sortAsc ? '↑' : '↓') : '';
+    });
+  }
+  ths.forEach(function (th, i) {
+    th.addEventListener('click', function () { sortBy(i); });
+  });
+
+  var target = null;
+  if (location.hash && location.hash.length > 1) {
+    try { target = decodeURIComponent(location.hash.slice(1)); } catch (e) { target = location.hash.slice(1); }
+  }
+  if (!target) target = DATA.open_detail;
+  if (target && APPS[target]) {
+    showDetail(target);
+    var card = document.getElementById('card-' + target);
+    if (card && card.scrollIntoView) card.scrollIntoView({ block: 'center' });
+  }
+})();
+</script>
+</body>
+</html>

@@ -109,6 +109,9 @@ APPS_MD       = os.path.join(REPO_ROOT, _PATHS_CFG["applications"])
 SSOT          = os.path.join(REPO_ROOT, _PATHS_CFG["ssot"])
 JOBS_DIR      = os.path.join(REPO_ROOT, "auto-apply", "jobs")
 OUT_DIR       = os.path.join(REPO_ROOT, "auto-apply", "applications")
+# 引擎模板目录：跟 build.py 本体走（__file__），不跟 REPO_ROOT 走——
+# RESUME_WORKSPACE 指向别处时，模板仍取自引擎所在仓库（与 html_render.py 同一目录约定）。
+TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 
 # 2026-05-27：渲染层从 Reactive Resume API 切到本地 HTML + Playwright（方案 2）。
 # 顶部不再 import 渲染层 —— cmd_make 在调用前动态 import html_render / docx_render，
@@ -127,12 +130,20 @@ def load_workspace_config():
     fact_redlines / strategy_rules 是核对/质检 prompt 的工作区专属注入段
     （build.py prompt 渲染时替换 {{FACT_REDLINES}} / {{STRATEGY_RULES}} 占位符），
     缺失时为空列表 —— 渲染层负责给出「未配置」的提示文案。
+    lint_patterns 是 engine_lint() 的扫描模式来源（selftest 第 7 项），见 engine_lint_patterns()。
 
     2026-07-08 新增 paths.rewrite_library：已核对片段库文件路径（相对仓库根），
-    默认值 "rewrite_library.yaml"（工作区根，与 master_resume.yaml 同级）。"""
+    默认值 "rewrite_library.yaml"（工作区根，与 master_resume.yaml 同级）。
+
+    2026-07-08 新增 privacy.deny_terms：release-gate 发布出口闸屏蔽词库
+    （私仓专属，公开仓不含 workspace.yaml，词库不会跟着代码泄漏）。缺失时
+    默认空列表——裸工作区/公开仓即使误跑 release-gate 也不会因缺字段而崩，
+    只是词库为空（此时仍会用自动派生的 contact/org_line 词做兜底扫描）。"""
     defaults = {"resume_layout": {"max_pages": 1, "overflow_strategy": "cut_content"},
                 "fact_redlines": [], "strategy_rules": [], "lint_patterns": [],
-                "paths": {"rewrite_library": "rewrite_library.yaml"}}
+                "paths": {"rewrite_library": "rewrite_library.yaml"},
+                "privacy": {"deny_terms": []},
+                "dashboard": {"language": "en"}}
     path = os.path.join(REPO_ROOT, "workspace.yaml")
     if not os.path.isfile(path):
         return defaults
@@ -142,11 +153,14 @@ def load_workspace_config():
         return defaults
     rl = {**defaults["resume_layout"], **(cfg.get("resume_layout") or {})}
     paths = {**defaults["paths"], **(cfg.get("paths") or {})}
+    privacy = {**defaults["privacy"], **(cfg.get("privacy") or {})}
+    dashboard = {**defaults["dashboard"], **(cfg.get("dashboard") or {})}
     return {"resume_layout": rl,
             "fact_redlines": [str(s) for s in (cfg.get("fact_redlines") or [])],
             "strategy_rules": [str(s) for s in (cfg.get("strategy_rules") or [])],
             "lint_patterns": [str(s) for s in (cfg.get("lint_patterns") or [])],
-            "paths": paths}
+            "paths": paths, "privacy": privacy,
+            "dashboard": dashboard}
 
 
 def rewrite_library_path():
@@ -269,10 +283,12 @@ def fill_resume_file(app_id, resume_filename):
 # ============================================================
 
 def fetch_jd(jd_url, jd_file):
+    # 2026-07-08 起两参数可共存：JS 渲染站（Indeed 等）抓不到时用 --jd-file 贴原文，
+    # 同时传 --jd-url 把可访问来源记进 jd.source（JD 留档铁律要求 URL，不再需要事后手补 yaml）。
     if jd_file:
         if not os.path.isfile(jd_file):
             sys.exit(f"JD 文件不存在：{jd_file}")
-        return "pasted", open(jd_file, encoding="utf-8").read()
+        return (jd_url or "pasted"), open(jd_file, encoding="utf-8").read()
     if jd_url:
         try:
             import urllib.request
@@ -391,7 +407,9 @@ def cmd_prep(args):
         "created": today,
         "stage": "Drafting",
         "jd": {"source": source, "raw_text": jd_text, "salary": salary,
-               "location": location, "contract_type": contract, "jd_summary": ""},
+               "location": location, "contract_type": contract, "jd_summary": "",
+               # 2026-07-09 新增：阶段2 填「入选理由」——为何过筛/为何值得投（投递卡展示用）
+               "selection_reason": ""},
         "resume": {
             "summary": {"master": master["summary"], "rewritten": ""},
             "experience": [
@@ -622,6 +640,8 @@ def cmd_verify(args):
         issues.append("所有 rewritten 为空 —— 阶段2 未填，简历会原样用母版")
     if not data["jd"].get("jd_summary", "").strip():
         issues.append("jd.jd_summary 为空")
+    if not (data["jd"].get("selection_reason") or "").strip():
+        issues.append("jd.selection_reason 为空 —— 阶段2 应填入选理由（投递卡展示；旧 APP 可忽略）")
     if not [p for p in data["cover_letter"].get("body_paragraphs", []) if p and p.strip()]:
         issues.append("cover_letter.body_paragraphs 为空 —— CL 不会生成")
     if has_rw and not data.get("provenance"):
@@ -1010,32 +1030,6 @@ def content_hash(data):
     return hashlib.sha256(dumped.encode("utf-8")).hexdigest()[:16]
 
 
-def _read_report_result(report_path, pattern, label):
-    """读报告文件，找首个非空行，匹配 pattern（如 RESULT: PASS|NEEDS-USER）。
-    返回匹配到的组1（去除首尾空白）。匹配不到 / FAIL / 文件不存在 → 报错退出。
-    label 用于报错信息（"factcheck" / "qualreview"）。"""
-    if not os.path.isfile(report_path):
-        sys.exit(f"[BLOCKED] --report 文件不存在：{report_path}")
-    text = open(report_path, encoding="utf-8").read()
-    first_nonempty = None
-    for ln in text.split("\n"):
-        if ln.strip():
-            first_nonempty = ln.strip()
-            break
-    if first_nonempty is None:
-        sys.exit(f"[BLOCKED] --report 文件为空：{report_path}")
-    m = re.match(pattern, first_nonempty)
-    if not m:
-        sys.exit(f"[BLOCKED] --report 首个非空行不符合预期格式：{first_nonempty!r}"
-                 f"\n  → {label} 报告首行必须是可解析的 RESULT/RATING 机器行")
-    return m.group(1), text
-
-
-# 核对报告首行的合法 token。NEEDS-USER 是现行 token（= 需候选人本人裁决）；
-# 旧模板产出的历史 token 同义接受，仅作向后兼容，模板/文档不再产出它。
-_FACTCHECK_RESULT_RE = r'RESULT:\s*(PASS|NEEDS-USER|NEEDS-LEON|FAIL)\s*$'  # engine-lint-allow: 旧 token 向后兼容
-
-
 # ============================================================
 # 子命令：harvest —— 已核对片段库（rewrite_library.yaml）
 # ============================================================
@@ -1044,7 +1038,7 @@ _FACTCHECK_RESULT_RE = r'RESULT:\s*(PASS|NEEDS-USER|NEEDS-LEON|FAIL)\s*$'  # eng
 # 减少每次阶段2 从零改写、也减少重复核对同样的事实点。
 #
 # 库文件本身只是"素材来源"，不是"成品模板"——阶段2 取用库片段仍需判断是否贴合
-# 当前 JD，改写后要不要保留 source 标注；keyword_map 纪律照常执行（见 jobs/_schema.md 3.1b）。
+# 当前 JD，改写后要不要保留 source 标注；keyword_map 纪律照常执行（见 _schema.md 3.1b）。
 
 def _slot_slug(label):
     """skills label（如 "SEO & Marketing:"）→ slot 用的小写 slug（去冒号、空格转下划线）。"""
@@ -1211,6 +1205,32 @@ def cmd_harvest(args):
     print(f"  库文件：{rewrite_library_path()}（共 {len(lib['snippets'])} 条）")
 
 
+def _read_report_result(report_path, pattern, label):
+    """读报告文件，找首个非空行，匹配 pattern（如 RESULT: PASS|NEEDS-USER）。
+    返回匹配到的组1（去除首尾空白）。匹配不到 / FAIL / 文件不存在 → 报错退出。
+    label 用于报错信息（"factcheck" / "qualreview"）。"""
+    if not os.path.isfile(report_path):
+        sys.exit(f"[BLOCKED] --report 文件不存在：{report_path}")
+    text = open(report_path, encoding="utf-8").read()
+    first_nonempty = None
+    for ln in text.split("\n"):
+        if ln.strip():
+            first_nonempty = ln.strip()
+            break
+    if first_nonempty is None:
+        sys.exit(f"[BLOCKED] --report 文件为空：{report_path}")
+    m = re.match(pattern, first_nonempty)
+    if not m:
+        sys.exit(f"[BLOCKED] --report 首个非空行不符合预期格式：{first_nonempty!r}"
+                 f"\n  → {label} 报告首行必须是可解析的 RESULT/RATING 机器行")
+    return m.group(1), text
+
+
+# 核对报告首行的合法 token。NEEDS-USER 是现行 token（= 需候选人本人裁决）；
+# 旧模板产出的历史 token 同义接受，仅作向后兼容，模板/文档不再产出它。
+_FACTCHECK_RESULT_RE = r'RESULT:\s*(PASS|NEEDS-USER|NEEDS-LEON|FAIL)\s*$'  # engine-lint-allow: 旧 token 向后兼容
+
+
 def cmd_factcheck_pass(args):
     """用户完成 factcheck 裁决（Claude 已执行删/留/补 SSOT）后跑此命令锁定 PASS。
     把 review_status.factcheck 写进 APP###.yaml，带时间戳和决策摘要。
@@ -1254,6 +1274,7 @@ def cmd_qualreview_pass(args):
     """质量审核 agent 跑完后，把 4 级评级 + 期待管理句写进 yaml + applications.md。
     --rating: High / Medium-High / Medium / Low
     --expectation: 期待管理一句话
+    --report: agent 报告文件路径（2026-07-09 起必传——报告全文是投递卡「优势/缺口」的数据源）
 
     前置检查：
     - APP###.yaml 必须存在
@@ -1291,16 +1312,13 @@ def cmd_qualreview_pass(args):
         "passed_at": datetime.datetime.now().isoformat(timespec="seconds"),
     }
 
-    report_arg = getattr(args, "report", None)
-    if report_arg:
-        report_rating, report_text = _read_report_result(
-            report_arg, r'RATING:\s*(High|Medium-High|Medium|Low)\s*$', "qualreview")
-        if report_rating != rating:
-            sys.exit(f"[BLOCKED] --report 首行 RATING: {report_rating} 与 --rating {rating} 不一致"
-                     f"\n  → 传入的 --rating 必须与报告首行机器行一致")
-        qualreview_entry["report"] = report_text
-    else:
-        print("  ⚠ 未传 --report —— 建议传 qualreview agent 报告文件留痕（--report <路径>）")
+    # --report 必传（argparse 层已强制）：报告全文落盘，是投递卡「优势/缺口」的数据源
+    report_rating, report_text = _read_report_result(
+        args.report, r'RATING:\s*(High|Medium-High|Medium|Low)\s*$', "qualreview")
+    if report_rating != rating:
+        sys.exit(f"[BLOCKED] --report 首行 RATING: {report_rating} 与 --rating {rating} 不一致"
+                 f"\n  → 传入的 --rating 必须与报告首行机器行一致")
+    qualreview_entry["report"] = report_text
 
     rs = data.setdefault("review_status", {})
     rs["qualreview"] = qualreview_entry
@@ -1939,6 +1957,29 @@ def _yaml_next_step(app_id, data):
     return f"build.py review --app {app_id}"
 
 
+def _app_artifact_files(app_id):
+    """收集 APP 成品文件（简历/CL/JD 留档）+ 数据 yaml 的绝对路径。
+    投递卡 file:// 链接用 —— dashboard 是本机单文件，绝对路径随每次重生成刷新，不怕仓库挪位。
+    返回 [{label, path}]，label 按文件名分类（CoverLetter/_jd 特判，其余视为简历）。"""
+    files = []
+    prefix = app_id.replace("-", "") + "_"
+    for p in sorted(glob.glob(os.path.join(OUT_DIR, prefix + "*"))):
+        if not os.path.isfile(p):
+            continue
+        base = os.path.basename(p)
+        if "CoverLetter" in base:
+            kind = "Cover Letter"
+        elif base.endswith("_jd.txt"):
+            kind = "JD 原文"
+        else:
+            kind = "简历"
+        files.append({"label": f"{kind} · {base}", "path": os.path.abspath(p)})
+    yp = os.path.join(JOBS_DIR, f"{app_id}.yaml")
+    if os.path.isfile(yp):
+        files.append({"label": f"数据 · {app_id}.yaml", "path": os.path.abspath(yp)})
+    return files
+
+
 def _collect_pipeline_data():
     """管道数据统一组装 —— cmd_status 和 cmd_dashboard 共用。绝不写任何文件。
 
@@ -2133,11 +2174,25 @@ def _collect_pipeline_data():
             d = _parse_date_safe(closed_date)
         days_in_state = _days_since(d)
 
+        # 投递卡详情字段（2026-07-09 新增）：入选理由/JD 链接/keyword 命中/质检数据/成品文件
+        jd = (data.get("jd") or {}) if data else {}
+        rs = (data.get("review_status") or {}) if data else {}
+        qr = rs.get("qualreview") or {}
         apps.append({
             "app_id": app_id, "company": company, "role": role, "stage": stage,
             "outcome": outcome, "applied": applied, "days_in_state": days_in_state,
             "follow_up_by": follow_up_by, "match": match, "resume_file": resume_file,
             "notes": notes, "closed_reason": closed_reason, "closed_date": closed_date,
+            "jd_url": (jd.get("source") or "").strip(),
+            # 入选理由：优先新字段 selection_reason，旧 APP 回退 jd_summary
+            "selection_reason": (jd.get("selection_reason") or "").strip(),
+            "jd_summary": (jd.get("jd_summary") or "").strip(),
+            "keyword_map": jd.get("keyword_map") or [],
+            "qual_rating": qr.get("rating") or "",
+            "qual_expectation": qr.get("expectation") or "",
+            "qual_report": qr.get("report") or "",
+            "factcheck_result": (rs.get("factcheck") or {}).get("result") or "",
+            "files": _app_artifact_files(app_id),
         })
 
     return {
@@ -2372,6 +2427,26 @@ def cmd_review(args):
     print("\n" + "=" * 56)
     if not blockers:
         print("  ✅ 四项全绿 —— 可以投递（投递为手动动作）")
+        # 2026-07-09 新增：全绿即重生成看板并打开该 APP 的投递卡
+        # （入选理由/优势缺口/Match/JD 链接/文件直达 —— 投递动作本身仍是手动）
+        try:
+            out_path, _pd = _write_dashboard(open_detail=app_id)
+            print(f"  ✓ dashboard 已重新生成：{out_path}（打开即弹 {app_id} 投递卡）")
+            if getattr(args, "no_open", False):
+                print(f"  （--no-open：跳过自动打开（浏览器投递卡 + Finder 选中成品）；"
+                      f"手动打开 dashboard.html 或访问 #{app_id}）")
+            elif sys.platform == "darwin":
+                subprocess.run(["open", out_path], check=False)
+                print(f"  ↗ 投递卡已在浏览器打开（{app_id}）——JD 链接与成品文件可直接点击")
+                # Finder 直开：弹窗并选中简历成品 PDF（CL 在同目录相邻可见），直接拖拽上传
+                subprocess.run(["open", "-R", resume_pdf], check=False)
+                print(f"  ↗ Finder 已弹出并选中简历成品（cover letter 同目录相邻）"
+                      f"——可直接拖拽上传：{os.path.basename(resume_pdf)}")
+            else:
+                print(f"  → 非 macOS，未自动打开；手动打开 dashboard.html 即弹 {app_id} 投递卡")
+        except (Exception, SystemExit) as e:
+            # SystemExit 也吃掉：模板/语言包缺失属安装破损提示，不该推翻已成立的全绿结论
+            print(f"  ⚠ 投递卡生成/打开失败（不影响全绿结论）：{e}")
         sys.exit(0)
     else:
         print(f"  ⛔ 未通过投递前检查，{len(blockers)} 项待办：")
@@ -2402,13 +2477,72 @@ def _dashboard_owner_label():
     return f"{name} Job Search" if name else "Job Search"
 
 
-def _dashboard_html(pd, generated_at):
-    """从 _collect_pipeline_data() 的结果组装单文件 HTML。纯内联 CSS/JS，零外部请求。"""
+def _load_dashboard_locale():
+    """读 dashboard UI 语言包（引擎 templates/dashboard_locale.yaml）+ workspace.yaml 的
+    dashboard.language（缺省 "en"），返回 (lang, L)。
+
+    回退链：请求语言块不存在 → "en" → 文件里第一个语言块；
+    对选中的语言块做 per-key 回退——以 en 块为基底 merge、请求语言覆盖，保证 key 齐全
+    （新语言块漏译个别 key 时该处显示英文，而不是页面出现空洞）。
+
+    语言包属引擎资产（与模板同级、受 engine_lint 扫描）：文件缺失/解析失败直接
+    SystemExit 带修复提示——缺了就是安装破损，不做静默降级。"""
+    locale_path = os.path.join(TEMPLATES_DIR, "dashboard_locale.yaml")
+    if not os.path.isfile(locale_path):
+        sys.exit(
+            f"dashboard 语言包不存在：{locale_path}\n"
+            "  这是引擎资产（随 auto-apply/templates/ 分发），缺失说明安装破损——用 git 恢复：\n"
+            "  git checkout -- auto-apply/templates/dashboard_locale.yaml"
+        )
+    try:
+        blocks = yaml.safe_load(open(locale_path, encoding="utf-8"))
+    except Exception as e:
+        sys.exit(
+            f"dashboard 语言包解析失败：{locale_path}\n  {e}\n"
+            "  修复该文件的 YAML 语法后重试（顶层结构：{语言码: {key: 文案}}），"
+            "或用 git 恢复：git checkout -- auto-apply/templates/dashboard_locale.yaml"
+        )
+    if not isinstance(blocks, dict) or not blocks:
+        sys.exit(
+            f"dashboard 语言包结构异常：{locale_path}\n"
+            "  顶层应为非空 dict（{语言码: {key: 文案}}）——"
+            "用 git 恢复：git checkout -- auto-apply/templates/dashboard_locale.yaml"
+        )
+
+    requested = (load_workspace_config().get("dashboard") or {}).get("language") or "en"
+    if requested in blocks:
+        lang = requested
+    elif "en" in blocks:
+        lang = "en"
+    else:
+        lang = next(iter(blocks))
+
+    base = blocks.get("en")
+    base = base if isinstance(base, dict) else {}
+    chosen = blocks.get(lang)
+    chosen = chosen if isinstance(chosen, dict) else {}
+    return lang, {**base, **chosen}
+
+
+def _dashboard_html(pd, generated_at, open_detail=None, templates_dir=None):
+    """从 _collect_pipeline_data() 的结果组装模板上下文，用 Jinja2 渲染
+    templates/dashboard.html.j2，返回**完整 HTML 文档**字符串（doctype/head/body
+    全部由模板输出，此处不再拼外壳）。页面铁律不变：单文件、纯内联 CSS/JS、零外部请求。
+    open_detail：页面加载即自动弹出该 APP 的投递卡（review 全绿路径传入——
+    macOS `open` 会剥掉 file:// URL 的 #fragment，锚点靠不住，所以嵌进 JSON）。
+    templates_dir：模板目录覆盖（默认引擎 TEMPLATES_DIR；单测注入 stub 模板目录用）。"""
+    try:
+        from jinja2 import (Environment, FileSystemLoader, TemplateNotFound,
+                            select_autoescape)
+    except ImportError:
+        sys.exit("缺少 jinja2，请先 pip install jinja2 --break-system-packages")
+
     apps = pd["apps"]
     owner_label = _dashboard_owner_label()
+    lang, L = _load_dashboard_locale()
 
-    # 告警区：复用 status 的今日行动列表（actions 已含权重+文本）
-    actions_sorted = [t for _, t in sorted(pd["actions"], key=lambda x: x[0])]
+    # 告警区：复用 status 的今日行动列表（actions 已含权重+文本），按权重排序
+    alerts = [t for _, t in sorted(pd["actions"], key=lambda x: x[0])]
 
     # 统计卡
     stats = {
@@ -2418,7 +2552,7 @@ def _dashboard_html(pd, generated_at):
         "ready_backlog": pd["ready_backlog"],
         "n_active": pd["n_active"],
         "n_closed": pd["n_closed"],
-        "n_alerts": len(actions_sorted),
+        "n_alerts": len(alerts),
     }
 
     # 看板列分组（按 stage；Closed 单独一列）
@@ -2444,244 +2578,66 @@ def _dashboard_html(pd, generated_at):
     months = sorted(set(applied_by_month) | set(rejected_by_month))
     trend = [{"month": m, "applied": applied_by_month.get(m, 0),
               "rejected": rejected_by_month.get(m, 0)} for m in months]
+    max_month_count = max([1] + [max(t["applied"], t["rejected"]) for t in trend]) if trend else 1
 
     data_json = _dashboard_json_escape({
         "generated_at": generated_at,
         "stats": stats,
-        "alerts": actions_sorted,
+        "alerts": alerts,
         "apps": apps,
         "kanban_counts": {k: len(v) for k, v in kanban.items()},
         "trend": trend,
+        "open_detail": open_detail,
     })
+    # 语言包同样要进 <script>（弹卡 JS 的文案用）——同一转义规则防 </script> 提前闭合
+    l_json = _dashboard_json_escape(L)
 
-    def esc(s):
-        return html.escape(str(s if s is not None else "—"))
-
-    def alert_class(text):
-        return "alert-red" if text.strip().startswith("⚠") else "alert-yellow"
-
-    alerts_html = "".join(
-        f'<div class="alert {alert_class(a)}">{esc(a)}</div>' for a in actions_sorted
-    ) or '<div class="alert alert-ok">今日无待办 ✓</div>'
-
-    def kanban_card(a):
-        badge = f'<span class="badge">{esc(a["match"])}</span>' if a.get("match") and a["match"] != "—" else ""
-        return (
-            f'<div class="card">'
-            f'<div class="card-top"><strong>{esc(a["app_id"])}</strong>{badge}</div>'
-            f'<div class="card-company">{esc(a["company"])}</div>'
-            f'<div class="card-role">{esc(a["role"])}</div>'
-            f'<div class="card-meta">{esc(a["outcome"])} · '
-            f'{(str(a["days_in_state"]) + " 天") if a["days_in_state"] is not None else "—"}</div>'
-            f'</div>'
+    tpl_dir = templates_dir or TEMPLATES_DIR
+    env = Environment(loader=FileSystemLoader(tpl_dir),
+                      autoescape=select_autoescape(["html", "j2"]))
+    try:
+        template = env.get_template("dashboard.html.j2")
+    except TemplateNotFound:
+        sys.exit(
+            f"dashboard 模板不存在：{os.path.join(tpl_dir, 'dashboard.html.j2')}\n"
+            "  这是引擎资产（简历/看板版式由 auto-apply/templates/ 唯一定义），"
+            "缺失说明安装破损——用 git 恢复：\n"
+            "  git checkout -- auto-apply/templates/dashboard.html.j2"
         )
+    return template.render(
+        L=L,
+        l_json=l_json,
+        lang=lang,
+        owner_label=owner_label,
+        generated_at=generated_at,
+        stats=stats,
+        alerts=alerts,
+        kanban=kanban,
+        apps=apps,
+        trend=trend,
+        max_month_count=max_month_count,
+        data_json=data_json,
+        open_detail=open_detail,
+    )
 
-    def kanban_column(name):
-        items = kanban[name]
-        if name == "Closed":
-            visible = ""
-            return (
-                f'<div class="kcol"><div class="kcol-head">{name}'
-                f'<span class="kcol-count">{len(items)}</span></div>'
-                f'<button class="expand-btn" onclick="this.nextElementSibling.style.display='
-                f"='block';this.style.display='none'\">展开 {len(items)} 条</button>"
-                f'<div class="kcol-body" style="display:none">'
-                + "".join(kanban_card(a) for a in items) + '</div></div>'
-            )
-        return (
-            f'<div class="kcol"><div class="kcol-head">{name}'
-            f'<span class="kcol-count">{len(items)}</span></div>'
-            f'<div class="kcol-body">' + "".join(kanban_card(a) for a in items) + '</div></div>'
-        )
 
-    kanban_html = "".join(kanban_column(c) for c in kanban_cols)
-
-    def table_row(a):
-        cls = "row-closed" if a["stage"] == "Closed" else ""
-        days = str(a["days_in_state"]) if a["days_in_state"] is not None else "—"
-        return (
-            f'<tr class="{cls}">'
-            f'<td>{esc(a["app_id"])}</td><td>{esc(a["company"])}</td><td>{esc(a["role"])}</td>'
-            f'<td>{esc(a["stage"])}</td><td>{esc(a["outcome"])}</td><td>{esc(a["applied"])}</td>'
-            f'<td>{days}</td><td>{esc(a["follow_up_by"])}</td><td>{esc(a["match"])}</td>'
-            f'<td>{esc(a["resume_file"])}</td><td>{esc(a["notes"])}</td>'
-            f'<td>{esc(a["closed_reason"])}</td><td>{esc(a["closed_date"])}</td>'
-            f'</tr>'
-        )
-
-    table_headers = ["APP", "Company", "Role", "Stage", "Outcome", "Applied", "天数",
-                      "Follow-up", "Match", "Resume File", "Notes", "Closed Reason", "Closed Date"]
-    table_head_html = "".join(f'<th onclick="sortTable({i})">{h} ⇅</th>' for i, h in enumerate(table_headers))
-    table_body_html = "".join(table_row(a) for a in apps)
-
-    max_month_count = max([1] + [max(t["applied"], t["rejected"]) for t in trend]) if trend else 1
-
-    def trend_bar(t):
-        w_applied = round(t["applied"] / max_month_count * 100, 1)
-        w_rejected = round(t["rejected"] / max_month_count * 100, 1)
-        return (
-            f'<div class="trend-row"><div class="trend-month">{esc(t["month"])}</div>'
-            f'<div class="trend-bars">'
-            f'<div class="trend-bar trend-applied" style="width:{w_applied}%" '
-            f'title="投递 {t["applied"]}">{t["applied"] or ""}</div>'
-            f'<div class="trend-bar trend-rejected" style="width:{w_rejected}%" '
-            f'title="拒信 {t["rejected"]}">{t["rejected"] or ""}</div>'
-            f'</div></div>'
-        )
-
-    trend_html = "".join(trend_bar(t) for t in trend) or '<div class="muted">暂无按月数据</div>'
-
-    return f"""<title>投递看板 · {esc(owner_label)}</title>
-<style>
-  :root {{
-    --bg: #f7f7f8; --card-bg: #ffffff; --border: #e2e2e6; --text: #1f2328;
-    --muted: #6b7280; --red: #dc2626; --red-bg: #fef2f2; --yellow: #b45309;
-    --yellow-bg: #fffbeb; --green: #16a34a; --accent: #2563eb;
-  }}
-  * {{ box-sizing: border-box; }}
-  body {{
-    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", Helvetica, Arial, sans-serif;
-    background: var(--bg); color: var(--text); margin: 0; padding: 24px; font-size: 14px;
-  }}
-  h1 {{ font-size: 20px; margin: 0 0 4px; }}
-  .subtitle {{ color: var(--muted); font-size: 12px; margin-bottom: 20px; }}
-  .stats-row {{ display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }}
-  .stat-card {{
-    background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
-    padding: 12px 16px; min-width: 130px; flex: 1;
-  }}
-  .stat-card .num {{ font-size: 22px; font-weight: 700; }}
-  .stat-card .label {{ color: var(--muted); font-size: 12px; margin-top: 2px; }}
-  section {{
-    background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
-    padding: 16px; margin-bottom: 20px;
-  }}
-  section h2 {{ font-size: 15px; margin: 0 0 12px; }}
-  .alert {{ padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }}
-  .alert-red {{ background: var(--red-bg); color: var(--red); }}
-  .alert-yellow {{ background: var(--yellow-bg); color: var(--yellow); }}
-  .alert-ok {{ background: #f0fdf4; color: var(--green); }}
-  .kanban {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }}
-  .kcol {{ background: #fafafa; border: 1px solid var(--border); border-radius: 8px; padding: 10px; min-height: 60px; }}
-  .kcol-head {{ font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; }}
-  .kcol-count {{ color: var(--muted); font-weight: 400; }}
-  .card {{
-    background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px;
-    padding: 8px 10px; margin-bottom: 8px; font-size: 12.5px;
-  }}
-  .card-top {{ display: flex; justify-content: space-between; align-items: center; }}
-  .badge {{ background: var(--accent); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 4px; }}
-  .card-company {{ font-weight: 600; margin-top: 2px; }}
-  .card-role {{ color: var(--muted); }}
-  .card-meta {{ color: var(--muted); font-size: 11px; margin-top: 4px; }}
-  .expand-btn {{
-    width: 100%; padding: 6px; background: #eee; border: 1px solid var(--border);
-    border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--text);
-  }}
-  table {{ border-collapse: collapse; width: 100%; font-size: 12.5px; }}
-  th, td {{ border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left; white-space: nowrap; }}
-  th {{ cursor: pointer; user-select: none; color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--card-bg); }}
-  .table-wrap {{ overflow-x: auto; max-height: 480px; overflow-y: auto; }}
-  tr.row-closed {{ color: #9ca3af; }}
-  .trend-row {{ display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }}
-  .trend-month {{ width: 64px; font-size: 12px; color: var(--muted); flex-shrink: 0; }}
-  .trend-bars {{ flex: 1; display: flex; flex-direction: column; gap: 2px; }}
-  .trend-bar {{ height: 14px; border-radius: 3px; font-size: 10px; color: #fff; padding-left: 4px; min-width: 2px; }}
-  .trend-applied {{ background: var(--accent); }}
-  .trend-rejected {{ background: var(--red); }}
-  .muted {{ color: var(--muted); }}
-  footer {{ color: var(--muted); font-size: 11px; margin-top: 16px; }}
-  code {{ background: #eee; padding: 1px 4px; border-radius: 3px; }}
-</style>
-
-<h1>投递看板</h1>
-<div class="subtitle">
-  只读视图，从 auto-apply/jobs/*.yaml 派生 —— 不提供任何写入功能（登记投递 / 关闭请用
-  <code>build.py submit</code> / <code>build.py close</code>）。
-  生成时间：{esc(generated_at)} · 重新生成：<code>python3 auto-apply/build.py dashboard</code>
-</div>
-
-<div class="stats-row">
-  <div class="stat-card"><div class="num">{stats['applied_total']}</div><div class="label">已投总数</div></div>
-  <div class="stat-card"><div class="num">{stats['interview_count']} / {stats['rejected_count']}</div><div class="label">面试 / 拒信数</div></div>
-  <div class="stat-card"><div class="num">{stats['ready_backlog']}</div><div class="label">Ready 待投</div></div>
-  <div class="stat-card"><div class="num">{stats['n_active']}</div><div class="label">在途 Active</div></div>
-  <div class="stat-card"><div class="num">{stats['n_alerts']}</div><div class="label">告警数</div></div>
-</div>
-
-<section>
-  <h2>今日行动 / 告警</h2>
-  {alerts_html}
-</section>
-
-<section>
-  <h2>看板</h2>
-  <div class="kanban">{kanban_html}</div>
-</section>
-
-<section>
-  <h2>全量表格（点列头排序）</h2>
-  <div class="table-wrap">
-    <table id="app-table">
-      <thead><tr>{table_head_html}</tr></thead>
-      <tbody>{table_body_html}</tbody>
-    </table>
-  </div>
-</section>
-
-<section>
-  <h2>月度趋势（投递 · 拒信）</h2>
-  {trend_html}
-</section>
-
-<footer>数据仅供参考，回应数等字段识别规则较粗糙，详见 build.py status 输出的字段说明。</footer>
-
-<script id="dashboard-data" type="application/json">{data_json}</script>
-<script>
-(function() {{
-  var sortState = {{}};
-  window.sortTable = function(colIdx) {{
-    var table = document.getElementById('app-table');
-    var tbody = table.tBodies[0];
-    var rows = Array.prototype.slice.call(tbody.rows);
-    var asc = !sortState[colIdx];
-    sortState = {{}};
-    sortState[colIdx] = asc;
-    rows.sort(function(a, b) {{
-      var av = a.cells[colIdx].innerText.trim();
-      var bv = b.cells[colIdx].innerText.trim();
-      var an = parseFloat(av), bn = parseFloat(bv);
-      var cmp;
-      if (!isNaN(an) && !isNaN(bn) && /^-?[\\d.]+$/.test(av) && /^-?[\\d.]+$/.test(bv)) {{
-        cmp = an - bn;
-      }} else {{
-        cmp = av.localeCompare(bv, 'zh');
-      }}
-      return asc ? cmp : -cmp;
-    }});
-    rows.forEach(function(r) {{ tbody.appendChild(r); }});
-  }};
-}})();
-</script>
-"""
+def _write_dashboard(out_path=None, open_detail=None):
+    """生成看板 HTML 落盘，返回 (绝对路径, pipeline_data)。cmd_dashboard 与 cmd_review 全绿共用。
+    铁律：单文件、自包含、零外部请求 —— 不引 CDN/外链字体/外链脚本。
+    模板 dashboard.html.j2 输出完整文档（doctype/head/body 全在模板里），此处只负责落盘。
+    open_detail：打开页面即自动弹出该 APP 投递卡（仅 review 全绿路径传；下次重生成自动清除）。"""
+    out_path = out_path or os.path.join(REPO_ROOT, "dashboard.html")
+    pd = _collect_pipeline_data()
+    generated_at = datetime.datetime.now().isoformat(timespec="seconds")
+    full_html = _dashboard_html(pd, generated_at, open_detail=open_detail)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(full_html)
+    return os.path.abspath(out_path), pd
 
 
 def cmd_dashboard(args):
-    """生成单文件只读投递看板 HTML（默认落 REPO_ROOT/dashboard.html）。
-    铁律：单文件、自包含、零外部请求 —— 不引 CDN/外链字体/外链脚本。"""
-    out_path = args.out or os.path.join(REPO_ROOT, "dashboard.html")
-    pd = _collect_pipeline_data()
-    generated_at = datetime.datetime.now().isoformat(timespec="seconds")
-    body = _dashboard_html(pd, generated_at)
-    full_html = (
-        "<!doctype html>\n<html lang=\"zh\"><head><meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        f"<title>投递看板 · {html.escape(_dashboard_owner_label())}</title>"
-        "</head><body>\n" + body + "\n</body></html>"
-    )
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(full_html)
-
+    """生成单文件只读投递看板 HTML（默认落 REPO_ROOT/dashboard.html）。"""
+    out_path, pd = _write_dashboard(args.out)
     size_kb = os.path.getsize(out_path) / 1024
     print(f"[OK] dashboard 生成完成：{out_path}（{size_kb:.1f} KB）")
     print(f"  APP 记录数：{len(pd['apps'])} · 告警数：{len(pd['actions'])}")
@@ -2712,7 +2668,10 @@ def render_agent_prompt(app_id, prompt_type):
         sys.exit(f"模板不存在：{tpl_path}")
     text = open(tpl_path, encoding="utf-8").read()
     if _PROMPT_START not in text or _PROMPT_END not in text.split(_PROMPT_START, 1)[1]:
-        sys.exit(f"模板缺少 {_PROMPT_START} / {_PROMPT_END} 标记：{tpl_path}")
+        sys.exit(f"模板缺少 {_PROMPT_START} / {_PROMPT_END} 标记：{tpl_path}"
+                 f"\n  → 本工作区模板可能按设计直接内嵌真实事实（未占位符化）——这种模板不走本命令，"
+                 f"\n    继续按原流程手工整段派发 agent 即可；"
+                 f"\n    或把模板改成占位符版（正文区间加 PROMPT-START/END 标记 + {{{{FACT_REDLINES}}}} 等占位符）后再用本命令")
     body = text.split(_PROMPT_START, 1)[1].split(_PROMPT_END, 1)[0].strip()
 
     cfg = load_workspace_config()
@@ -2922,26 +2881,28 @@ def engine_lint_patterns():
 
 
 def engine_lint():
-    """扫描引擎文件（auto-apply/*.py + auto-apply/templates/* + jobs/ 下的 prompt 模板）
-    里的个人硬编码字符串。
+    """扫描引擎文件（auto-apply/*.py + auto-apply/templates/*）里的个人硬编码字符串。
     2026-07-07 新增（阶段3 可复制性）：引擎代码不得写死任何具体用户的姓名/邮箱/电话，
     这些必须从 master_resume.yaml / workspace.yaml 派生。
-    2026-07-07 发布阶段扩展：jobs/_verifier_prompt.md / _quality_review_prompt.md 已改为
-    占位符模板（事实红线迁入 workspace.yaml，由 build.py prompt 注入），因此纳入扫描 ——
-    模板里再出现个人事实即回归。
-    2026-07-08 扩展：改扫 jobs/ 下全部 `_*.md` 引擎文档（含 _schema.md）——
-    v1.0.0 曾在 _schema.md 固定史实约束一节泄漏真实客户名/雇主名，而当时扫描范围
-    不含该文件，selftest 第 7 项静默放行。引擎文档与 prompt 模板同属发布内容，一并扫。
+
+    2026-07-09 回灌发布仓 e4b879a：扫描范围扩到 jobs/ 下全部 `_*.md` 引擎文档（含 _schema.md）——
+    v1.0.0 曾经 _schema.md 固定史实一节泄漏真实客户名，当时该文件不在扫描范围、selftest 静默放行。
+    私仓特例：本工作区的 jobs 文档**按设计**含用户真实事实（prompt 模板要具体人名做核对基准），
+    这类文件在**前 5 行**放 `engine-lint-allow-file:` 标记即整文件豁免（豁免会打印提示，不静默）；
+    发布版同名文件为去个人化模板、不带标记，在发布仓照常全量受扫——纵深不丢。
+
+    2026-07-09 洁净化：扫描模式不再内置（内置列表本身就是个人信息），改由
+    engine_lint_patterns() 从 workspace.yaml lint_patterns + master contact.name 派生。
 
     返回 list[str]，每条 "相对路径:行号: 命中模式 | 行内容"。空列表 = 干净。
     """
     engine_dir = os.path.dirname(os.path.abspath(__file__))
     paths = sorted(glob.glob(os.path.join(engine_dir, "*.py"))) + \
-            sorted(glob.glob(os.path.join(engine_dir, "templates", "*"))) + \
-            sorted(glob.glob(os.path.join(engine_dir, "jobs", "_*.md")))
+            sorted(glob.glob(os.path.join(engine_dir, "templates", "*")))
     # templates 目录下可能含子目录（如 docx_skeleton/），用 glob 只取一层文件；
     # 子目录内文件另行遍历一层，覆盖 templates/*/*  但不递归更深。
     paths += sorted(glob.glob(os.path.join(engine_dir, "templates", "*", "*")))
+    paths += sorted(glob.glob(os.path.join(engine_dir, "jobs", "_*.md")))
 
     pats = engine_lint_patterns()
     if not pats:
@@ -2957,6 +2918,9 @@ def engine_lint():
             continue
         rel = os.path.relpath(path, os.path.dirname(engine_dir))
         lines = text.split("\n")
+        if any("engine-lint-allow-file:" in ln for ln in lines[:5]):
+            print(f"     · lint 文件级豁免：{rel}（文件头声明按设计含用户事实）")
+            continue
         for i, line in enumerate(lines, start=1):
             m = pattern.search(line)
             if not m:
@@ -2967,6 +2931,320 @@ def engine_lint():
                 continue
             hits.append(f"{rel}:{i}: 命中 {m.group(0)!r} | {line.strip()[:120]}")
     return hits
+
+
+# ============================================================
+# 子命令：release-gate —— 公开发布前个人数据出口审查
+# ============================================================
+#
+# 与 engine_lint() 的区别：engine_lint 只扫引擎代码文件（*.py + templates/），
+# 只找身份字符串（姓名/邮箱/电话），且明确排除 jobs/_*.md。
+# release-gate 扫的是**整个发布仓工作树**（不排除任何目录——jobs/、docs/、
+# evals/ 全扫），且屏蔽词库覆盖身份信息之外的职业事实（客户名/雇主名/项目名/
+# 专属数字）。v1.0.0 泄漏就是因为 jobs/_schema.md 被原样打包进发布仓，
+# 而当时唯一的 lint（engine_lint）排除了这个文件、也不认识客户名这类词。
+#
+# 屏蔽词库存在私仓 workspace.yaml（本文件），发布仓（--dir 指向的目录）
+# 不含 workspace.yaml，所以词库本身不会随公开代码一起泄漏。
+
+# 非文本/二进制扩展名，release-gate 扫描时跳过（内容不是可读文本，扫了也无意义）。
+_RELEASE_GATE_BINARY_EXTS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".docx", ".doc",
+    ".woff", ".woff2", ".ttf", ".otf", ".eot", ".zip", ".gz", ".tar", ".xz",
+    ".mp4", ".mp3", ".wav", ".mov", ".avi",
+}
+
+
+def _release_gate_org_terms(master):
+    """从 master experience 的 org_line 派生机构名词条。
+    org_line 格式形如 "机构名  ·  性质  ·  地点"（分隔符是全角/半角空格包裹的
+    "·"），取第一段视为机构名。空 experience 或字段缺失时安全跳过。"""
+    terms = []
+    for e in (master.get("experience") or []):
+        org_line = (e.get("org_line") or "").strip()
+        if not org_line:
+            continue
+        # 按 "·" 切分（前后可能有一个或多个空格，用正则统一处理）
+        first_seg = re.split(r"\s*·\s*", org_line)[0].strip()
+        if first_seg:
+            terms.append(first_seg)
+    return terms
+
+
+def _release_gate_contact_terms(master):
+    """从 master contact 段派生姓名/邮箱/电话词条。
+    name 按空白拆分成词段（过滤掉纯符号如括号），line 里正则提取邮箱和电话号。"""
+    terms = []
+    contact = master.get("contact") or {}
+    name = (contact.get("name") or "").strip()
+    if name:
+        terms.append(name)  # 全名整体也拦一次
+        for seg in re.split(r"[\s()]+", name):
+            seg = seg.strip()
+            if len(seg) >= 2:  # 过滤掉孤立单字符/空串
+                terms.append(seg)
+    line = (contact.get("line") or "")
+    terms += re.findall(r"[\w.+-]+@[\w-]+\.[\w.-]+", line)          # 邮箱
+    terms += re.findall(r"\b\d{3}[-\s]?\d{3}[-\s]?\d{4}\b", line)   # 电话（形如 555-555-5555）
+    return [t for t in terms if t]
+
+
+def build_release_gate_terms():
+    """组装 release-gate 完整屏蔽词表：
+    workspace.yaml privacy.deny_terms（人工维护） + 自动派生（contact 姓名/
+    邮箱/电话 + 每段 experience 的 org_line 机构名）。
+    去重但保留原始大小写（匹配时统一大小写不敏感处理）。"""
+    ws = load_workspace_config()
+    terms = list(ws.get("privacy", {}).get("deny_terms") or [])
+    master = load_master()
+    terms += _release_gate_contact_terms(master)
+    terms += _release_gate_org_terms(master)
+    # 去重（大小写不敏感去重，保留首次出现的大小写形式），并过滤空串/过短噪音词
+    seen = set()
+    out = []
+    for t in terms:
+        t = t.strip()
+        if not t or len(t) < 2:
+            continue
+        key = t.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+    return out
+
+
+def _release_gate_tracked_files(target_dir):
+    """列出 --dir 下 git 追踪的文本文件（过滤二进制扩展名）。
+    只读操作——不对 target_dir 做任何写入。target_dir 必须是 git 仓库
+    （或其子目录），否则 git ls-files 会报错，直接把 stderr 冒泡给调用方处理。"""
+    result = subprocess.run(
+        ["git", "-C", target_dir, "ls-files"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        sys.exit(f"release-gate：{target_dir} 不是 git 仓库或 git ls-files 失败\n{result.stderr}")
+    files = []
+    for rel in result.stdout.splitlines():
+        rel = rel.strip()
+        if not rel:
+            continue
+        ext = os.path.splitext(rel)[1].lower()
+        if ext in _RELEASE_GATE_BINARY_EXTS:
+            continue
+        files.append(rel)
+    return files
+
+
+def _release_gate_scan(target_dir, allow_extra=None):
+    """release-gate 扫描核心（cmd_release_gate 与 cmd_release_sync 共用）。
+    对 target_dir（git 仓工作树）只读扫描，返回 hits list[str]（空列表 = 全绿）。
+    扫描对象是 git ls-files 列出的文件（含已 staged 的新文件），过滤二进制扩展名。"""
+    terms = build_release_gate_terms()
+    allow_extra = [a.strip() for a in (allow_extra or []) if a.strip()]
+    if allow_extra:
+        print(f"[release-gate] 临时豁免词（--allow）：{allow_extra}")
+    effective_terms = [t for t in terms
+                        if not any(t.lower() == a.lower() for a in allow_extra)]
+
+    if not effective_terms:
+        print("[release-gate] ⚠ 屏蔽词表为空（workspace.yaml privacy.deny_terms 未配置，"
+              "master_resume.yaml 也未能派生词条），扫描不会有意义的命中。")
+
+    # 词边界匹配：纯 ASCII 字母/数字词（如派生出的短姓氏词 "DOE"）加 \b 词边界，避免命中
+    # "does"/"doesn't" 这类子串误报；含空格/符号/非 ASCII（中文、"·" 等）的
+    # 词条本身已经足够特定，原样转义即可，不加词边界（\b 对中文/符号无意义）。
+    def _term_regex(t):
+        escaped = re.escape(t)
+        if re.fullmatch(r"[A-Za-z0-9]+", t):
+            return rf"\b{escaped}\b"
+        return escaped
+
+    pattern = re.compile("|".join(_term_regex(t) for t in effective_terms), re.IGNORECASE) \
+        if effective_terms else None
+
+    files = _release_gate_tracked_files(target_dir)
+    print(f"[release-gate] 扫描 {target_dir}（git 追踪文本文件 {len(files)} 个，"
+          f"屏蔽词 {len(effective_terms)} 条）")
+
+    hits = []
+    if pattern:
+        for rel in files:
+            abs_path = os.path.join(target_dir, rel)
+            try:
+                text = open(abs_path, encoding="utf-8").read()
+            except Exception:
+                continue  # 非 UTF-8 文本（大概率是遗漏的二进制），跳过不报
+            for i, line in enumerate(text.split("\n"), start=1):
+                m = pattern.search(line)
+                if not m:
+                    continue
+                if "engine-lint-allow" in line:
+                    continue
+                hits.append(f"{rel}:{i}: 命中 {m.group(0)!r} | {line.strip()[:80]}")
+    return hits
+
+
+def cmd_release_gate(args):
+    """公开发布前个人数据出口审查。对 --dir 指向的发布仓工作树只读扫描，
+    绝不修改该目录任何文件（另一会话可能正在其中工作）。
+
+    退出码：0 = 全绿（可推送），1 = 有命中（禁止推送）。"""
+    target_dir = os.path.abspath(args.dir)
+    if not os.path.isdir(target_dir):
+        sys.exit(f"release-gate：目录不存在 {target_dir}")
+
+    hits = _release_gate_scan(target_dir, allow_extra=args.allow)
+
+    if hits:
+        print(f"\n✗ release-gate 未通过 —— {len(hits)} 处命中：\n")
+        for h in hits:
+            print(f"  {h}")
+        print(f"\n✗ 禁止推送到公开仓。清理命中项后重跑，或行内加 engine-lint-allow 标记真正的误报。")
+        sys.exit(1)
+    else:
+        print("\n✅ release-gate 通过，可推送")
+
+
+# ============================================================
+# 子命令：release-sync —— 私仓引擎 → 发布仓镜像同步（本地 commit，不 push）
+# ============================================================
+#
+# 流程：allowlist 比对 → 拷贝差异文件 → 三闸（engine_lint 私仓侧 /
+# release-gate 发布仓全树 / 前两者全绿才 commit）→ 本地 commit（含私仓
+# HEAD 溯源）。push 永远是人工动作 —— 本命令绝不联网、绝不 push。
+#
+# allowlist 是硬编码的引擎文件清单（相对 auto-apply/，全部无隐私内容）；
+# 发布仓的 SKILL.md / CHANGELOG / docs 等不在同步范围，仍人工维护。
+
+_RELEASE_SYNC_ALLOWLIST = [
+    "build.py", "html_render.py", "docx_render.py", "sync_check.py",
+    "templates/_header.html.j2", "templates/_theme.css.j2",
+    "templates/cl.html.j2", "templates/resume.html.j2",
+    "templates/dashboard.html.j2", "templates/dashboard_locale.yaml",
+    "evals/inject_canaries.py",
+]
+
+
+def _release_sync_files():
+    """展开 allowlist（静态清单 + fonts/ 下全部 *.woff2），返回相对 auto-apply/ 的路径列表。"""
+    engine_dir = os.path.dirname(os.path.abspath(__file__))
+    rels = list(_RELEASE_SYNC_ALLOWLIST)
+    for p in sorted(glob.glob(os.path.join(engine_dir, "fonts", "*.woff2"))):
+        rels.append(os.path.join("fonts", os.path.basename(p)))
+    return rels
+
+
+def cmd_release_sync(args):
+    """私仓引擎文件镜像到发布仓（--dir）。逐文件比对 → 拷贝差异 → 三闸全绿 → 本地 commit。
+    --dry-run 只打印比对清单，不写任何文件。push 是手动动作，本命令不 push。"""
+    engine_dir = os.path.dirname(os.path.abspath(__file__))
+    target_dir = os.path.abspath(args.dir)
+    if not os.path.isdir(target_dir):
+        sys.exit(f"release-sync：目录不存在 {target_dir}")
+
+    def git(*a, check=False):
+        r = subprocess.run(["git", "-C", target_dir, *a], capture_output=True, text=True)
+        if check and r.returncode != 0:
+            sys.exit(f"release-sync：git {' '.join(a)} 失败\n{r.stderr}")
+        return r
+
+    # ---- 前置：--dir 是 git 仓且工作树干净 ----
+    r = git("rev-parse", "--is-inside-work-tree")
+    if r.returncode != 0 or r.stdout.strip() != "true":
+        sys.exit(f"release-sync：{target_dir} 不是 git 仓库\n{r.stderr}")
+    r = git("status", "--porcelain")
+    if r.stdout.strip():
+        sys.exit(f"release-sync：{target_dir} 工作树不干净 —— 先 commit / stash / 清理未跟踪文件再跑：\n"
+                 + r.stdout.rstrip())
+
+    # ---- 逐文件比对 ----
+    same, updated, added, missing_src = [], [], [], []
+    for rel in _release_sync_files():
+        src = os.path.join(engine_dir, rel)
+        dst = os.path.join(target_dir, "auto-apply", rel)
+        if not os.path.isfile(src):
+            missing_src.append(rel)
+            continue
+        src_bytes = open(src, "rb").read()
+        if not os.path.isfile(dst):
+            added.append(rel)
+        elif open(dst, "rb").read() == src_bytes:
+            same.append(rel)
+        else:
+            updated.append(rel)
+
+    print(f"== release-sync {'（dry-run）' if args.dry_run else ''} ==")
+    print(f"  私仓引擎：{engine_dir}")
+    print(f"  发布仓：{target_dir}")
+    print(f"\n  相同 {len(same)} 个：" + (", ".join(same) if same else "（无）"))
+    print(f"  更新 {len(updated)} 个：" + (", ".join(updated) if updated else "（无）"))
+    print(f"  新增 {len(added)} 个：" + (", ".join(added) if added else "（无）"))
+    if missing_src:
+        print(f"  ⚠ 私仓缺失（allowlist 有列但源文件不存在，跳过）：{', '.join(missing_src)}")
+
+    diff_files = updated + added
+    if args.dry_run:
+        print(f"\n  dry-run 结束 —— 未写任何文件。去掉 --dry-run 执行拷贝 + 三闸 + commit。")
+        return
+    if not diff_files:
+        print(f"\n  ✓ 发布仓引擎已与私仓一致，无需同步。")
+        return
+
+    # ---- 拷贝差异文件 + git add（先 add：新文件进 git ls-files，release-gate 才扫得到） ----
+    rel_targets = []
+    for rel in diff_files:
+        src = os.path.join(engine_dir, rel)
+        dst = os.path.join(target_dir, "auto-apply", rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copyfile(src, dst)
+        rel_targets.append(os.path.join("auto-apply", rel))
+    git("add", "--", *rel_targets, check=True)
+    print(f"\n  已拷贝 {len(rel_targets)} 个文件到发布仓（已 staged，commit 前过三闸）")
+
+    def rollback():
+        """谨慎只回滚 auto-apply 子树（发布仓其余部分可能有别的会话在工作）。"""
+        git("reset", "-q", "--", "auto-apply")
+        git("checkout", "--", "auto-apply")
+        git("clean", "-fd", "--", "auto-apply")
+        print(f"  ↩ 已回滚发布仓 auto-apply/ 子树到同步前状态")
+
+    # ---- 闸 1：engine_lint（私仓侧 —— 源头必须干净） ----
+    print(f"\n[闸 1/2] engine_lint（私仓引擎文件）")
+    lint_hits = engine_lint()
+    if lint_hits:
+        print(f"  ✗ 私仓引擎 lint 命中 {len(lint_hits)} 处：")
+        for h in lint_hits:
+            print(f"     {h}")
+        rollback()
+        sys.exit("release-sync：engine_lint 未通过 —— 先清理私仓源头命中项再重跑")
+
+    print(f"  ✓ engine_lint 通过")
+
+    # ---- 闸 2：release-gate 全树扫描（发布仓侧 —— 出口必须干净） ----
+    print(f"\n[闸 2/2] release-gate（发布仓全树）")
+    gate_hits = _release_gate_scan(target_dir)
+    if gate_hits:
+        print(f"  ✗ release-gate 命中 {len(gate_hits)} 处：")
+        for h in gate_hits:
+            print(f"     {h}")
+        rollback()
+        sys.exit("release-sync：release-gate 未通过 —— 分析命中项（新雷修源头 / 误报加 engine-lint-allow）后重跑")
+
+    print(f"  ✓ release-gate 通过")
+
+    # ---- 三闸全绿（比对 + 两道扫描）→ 本地 commit ----
+    src_head = subprocess.run(["git", "-C", REPO_ROOT, "rev-parse", "--short", "HEAD"],
+                              capture_output=True, text=True).stdout.strip() or "unknown"
+    msg = (f"engine-sync: mirror private engine @{src_head}\n\n"
+           f"Synced {len(rel_targets)} file(s) via build.py release-sync "
+           f"(updated {len(updated)}, added {len(added)}).\n\n"
+           f"Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>")
+    git("commit", "-m", msg, check=True)
+    head = git("rev-parse", "--short", "HEAD").stdout.strip()
+    print(f"\n[OK] release-sync 完成 —— 发布仓本地 commit {head}（溯源私仓 @{src_head}）")
+    print(f"  ⚠ push 是手动动作：先人工 bump ENGINE_VERSION（build.py）+ 发布仓 SKILL.md "
+          f"frontmatter version + CHANGELOG，确认后再 git -C {target_dir} push")
 
 
 def _selftest_print(ok, label, detail=""):
@@ -3244,6 +3522,12 @@ strategy_rules: []
 # 姓名/邮箱不是唯一的泄漏面：雇主名、客户/项目名、标志性预算金额同样能定位到
 # 你本人——v1.0.0 发布曾因扫描列表缺这类模式漏检真实客户名。建议一并列入。
 lint_patterns: []
+
+privacy:
+  # 发布出口闸（build.py release-gate）屏蔽词库 —— 姓名/邮箱不是唯一泄漏面：
+  # 雇主名、客户/项目名、标志性预算金额同样能定位到你本人（v1.0.0 曾因扫描
+  # 列表缺这类模式漏检真实客户名）。建议把这几类一并列入。
+  deny_terms: []
 """
 
 _INIT_SSOT_MD = """\
@@ -3512,9 +3796,10 @@ def main():
     p.add_argument("--role", required=True)
     p.add_argument("--reuse", action="store_true", help="允许对已存在 APP 重新生成数据文件")
     p.add_argument("--force", action="store_true", help="强制覆盖已填阶段2 内容的 YAML")
-    g = p.add_mutually_exclusive_group()
-    g.add_argument("--jd-url")
-    g.add_argument("--jd-file")
+    # --jd-url 与 --jd-file 可共存（2026-07-08）：file 供 JD 原文，url 记录可访问来源；
+    # 只传 url 则尝试抓取，只传 file 则 source 记 "pasted"
+    p.add_argument("--jd-url")
+    p.add_argument("--jd-file")
 
     v = sub.add_parser("verify", help="检查阶段2 完整性 + 核对状态")
     v.add_argument("--app", required=True)
@@ -3540,7 +3825,8 @@ def main():
                     help="4 级匹配度评级")
     qp.add_argument("--expectation", required=True,
                     help="期待管理一句话（会同步进 applications.md）")
-    qp.add_argument("--report", help="（可选）qualreview agent 报告文本文件路径，"
+    qp.add_argument("--report", required=True,
+                    help="qualreview agent 报告文本文件路径（必传，2026-07-09 起与 factcheck-pass 对齐），"
                     "首个非空行须是 RATING: <4级> 且与 --rating 一致")
 
     m = sub.add_parser("make", help="生成简历+CL（默认只留 PDF）")
@@ -3549,8 +3835,10 @@ def main():
     m.add_argument("--dry-run", action="store_true", help="预演内容组装，不打包")
     m.add_argument("--docx", action="store_true", help="同时保留 docx（默认只留 PDF）")
 
-    rv = sub.add_parser("review", help="投递前总闸：核对/版式/质量")
+    rv = sub.add_parser("review", help="投递前总闸：核对/版式/质量（全绿自动打开投递卡）")
     rv.add_argument("--app", required=True)
+    rv.add_argument("--no-open", action="store_true",
+                    help="全绿后不自动打开（浏览器投递卡 + Finder 选中成品都跳过；dashboard 仍会重新生成）")
 
     hv = sub.add_parser("harvest", help="从已 factcheck PASS 的 APP###.yaml 提取 rewritten 入库 rewrite_library.yaml")
     hv.add_argument("--app", required=True)
@@ -3596,6 +3884,18 @@ def main():
     it = sub.add_parser("init", help="新工作区脚手架（workspace.yaml/SSOT模板/母版骨架/applications.md空表）")
     it.add_argument("--dir", help="目标目录，默认当前目录。须为空或不含 workspace.yaml")
 
+    rg = sub.add_parser("release-gate",
+                        help="公开发布前个人数据出口审查：扫 --dir 发布仓工作树，命中屏蔽词即拒绝推送")
+    rg.add_argument("--dir", required=True, help="发布仓工作树路径（只读扫描，不修改该目录任何文件）")
+    rg.add_argument("--allow", action="append",
+                    help="临时豁免某个屏蔽词（可重复传）；打印提示，不影响 workspace.yaml 词库本身")
+
+    rs = sub.add_parser("release-sync",
+                        help="私仓引擎文件镜像到发布仓：allowlist 比对 → 拷贝差异 → "
+                             "engine_lint + release-gate 全绿 → 发布仓本地 commit（不 push）")
+    rs.add_argument("--dir", required=True, help="发布仓工作树路径（须是 git 仓且工作树干净）")
+    rs.add_argument("--dry-run", action="store_true", help="只打印比对清单，不写任何文件")
+
     args = ap.parse_args()
     {"prep": cmd_prep,
      "verify": cmd_verify,
@@ -3613,7 +3913,9 @@ def main():
      "tracker": cmd_tracker,
      "submit": cmd_submit,
      "close": cmd_close,
-     "fact": cmd_fact}[args.cmd](args)
+     "fact": cmd_fact,
+     "release-gate": cmd_release_gate,
+     "release-sync": cmd_release_sync}[args.cmd](args)
 
 
 if __name__ == "__main__":
